@@ -25,9 +25,21 @@ from mace.tools.scripts_utils import (
     get_dataset_from_xyz,
 )
 
+# if mpi, import mpi4py
+try:
+    from mpi4py import MPI
+except ImportError:
+    pass
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
+    try:
+        logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        args.seed += rank
+    except NameError:
+        logging.info("mpi4py not found, running in serial mode")
     tag = tools.get_tag(name=args.name, seed=args.seed)
 
     # Setup
@@ -507,6 +519,7 @@ def main() -> None:
         max_grad_norm=args.clip_grad,
         log_errors=args.error_table,
         log_wandb=args.wandb,
+        wall_clock_time=args.wallclock_time,
     )
 
     # Evaluation on test datasets

@@ -12,7 +12,7 @@ from typing import List, Optional, Union
 def build_default_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
-    # Name and seed
+    # Name, seed, and MPI
     parser.add_argument("--name", help="experiment name", required=True)
     parser.add_argument("--seed", help="random seed", type=int, default=123)
 
@@ -449,6 +449,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="Gradient Clipping Value",
         type=check_float_or_none,
         default=10.0,
+    )
+    parser.add_argument(
+        "--wall_clock_time",
+        help="Maximum wall clock time in seconds",
+        type=float,
+        default=0,
     )
     # options for using Weights and Biases for experiment tracking
     # to install see https://wandb.ai

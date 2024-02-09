@@ -56,7 +56,14 @@ def train(
     ema: Optional[ExponentialMovingAverage] = None,
     max_grad_norm: Optional[float] = 10.0,
     log_wandb: bool = False,
+    wall_clock_time: float = 0,
 ):
+    # Start timers if wanted
+    if wall_clock_time != 0:
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+
     lowest_loss = np.inf
     valid_loss = np.inf
     patience_counter = 0
@@ -70,6 +77,15 @@ def train(
     logging.info("Started training")
     epoch = start_epoch
     while epoch < max_num_epochs:
+        # Check time
+        if wall_clock_time != 0:
+            end.record()
+            torch.cuda.synchronize()
+            if start.elapsed_time(end) / 1000 > wall_clock_time:
+                logging.info(
+                    f"Stopping optimization after {wall_clock_time} seconds of wall_clock time"
+                )
+                break
         # LR scheduler and SWA update
         if swa is None or epoch < swa.start:
             if epoch > start_epoch:
