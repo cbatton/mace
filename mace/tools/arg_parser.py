@@ -7,14 +7,80 @@
 import argparse
 import ast
 from typing import List, Optional, Union
+import yaml
+# if mpi, import mpi4py
+try:
+    from mpi4py import MPI
+except ImportError:
+    pass
+
+
+class LoadFromFile(argparse.Action):
+    # parser.add_argument('--file', type=open, action=LoadFromFile)
+    def __call__(self, parser, namespace, values, option_string=None):
+        # make new values with correct name from MPI
+        if values.name.endswith("yaml") or values.name.endswith("yml"):
+            # copy name attribute of values to new variable
+            name = values.name
+            try:
+                name = name.replace(".", f"_{MPI.COMM_WORLD.Get_rank()}.")
+            except NameError:
+                pass
+
+            with open(name, "r") as f:
+                config = yaml.load(f, Loader=yaml.FullLoader)
+            for key in config.keys():
+                if key not in namespace:
+                    raise ValueError(f"Unknown argument in config file: {key}")
+            if (
+                "load_model" in config
+                and namespace.load_model is not None
+                and config["load_model"] != namespace.load_model
+            ):
+                rank_zero_warn(
+                    f"The load model argument was specified as a command line argument "
+                    f"({namespace.load_model}) and in the config file ({config['load_model']}). "
+                    f"Ignoring 'load_model' from the config file and loading {namespace.load_model}."
+                )
+                del config["load_model"]
+            namespace.__dict__.update(config)
+        else:
+            raise ValueError("Configuration file must end with yaml or yml")
+
+
+def save_argparse(args, filename, exclude=None):
+    import json
+
+    if filename.endswith("yaml") or filename.endswith("yml"):
+        if isinstance(exclude, str):
+            exclude = [exclude]
+        args = args.__dict__.copy()
+        for exl in exclude:
+            del args[exl]
+
+        ds_arg = args.get("dataset_arg")
+        if ds_arg is not None and isinstance(ds_arg, str):
+            args["dataset_arg"] = json.loads(args["dataset_arg"])
+        yaml.dump(args, open(filename, "w"))
+    else:
+        raise ValueError("Configuration file should end with yaml or yml")
 
 
 def build_default_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
-    # Name, seed, and MPI
-    parser.add_argument("--name", help="experiment name", required=True)
-    parser.add_argument("--seed", help="random seed", type=int, default=123)
+    # Load values from yaml file
+    parser.add_argument(
+        "--conf",
+        type=open,
+        action=LoadFromFile,
+        help="Configuration yaml file",
+    )
+
+    # Name, seed, base, and MPI
+    parser.add_argument("--name", help="experiment name")
+    parser.add_argument("--seed", help="random seed", type=int, default=0)
+    parser.add_argument("--base", help="base number", type=int, default=0)
 
     # Directories
     parser.add_argument(
@@ -211,7 +277,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
 
     # Dataset
     parser.add_argument(
-        "--train_file", help="Training set xyz file", type=str, required=True
+        "--train_file", help="Training set xyz file", type=str
     )
     parser.add_argument(
         "--valid_file",
