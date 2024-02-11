@@ -33,6 +33,7 @@ except ImportError:
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
+    tools.save_argparse(args, "test.yaml", exclude="conf")
     try:
         logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
         comm = MPI.COMM_WORLD
@@ -41,6 +42,9 @@ def main() -> None:
     except NameError:
         logging.info("mpi4py not found, running in serial mode")
     tag = tools.get_tag(name=args.name, seed=args.seed)
+    # also add tag to directory names in args
+    for key in ["log_dir", "results_dir", "checkpoints_dir", "model_dir"]:
+        args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.seed)
 
     # Setup
     tools.set_seeds(args.seed)
@@ -514,6 +518,7 @@ def main() -> None:
         patience=args.patience,
         output_args=output_args,
         device=device,
+        save_interval=args.save_interval,
         swa=swa,
         ema=ema,
         max_grad_norm=args.clip_grad,

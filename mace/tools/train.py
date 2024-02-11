@@ -52,6 +52,7 @@ def train(
     output_args: Dict[str, bool],
     device: torch.device,
     log_errors: str,
+    save_interval: int = 10,
     swa: Optional[SWAContainer] = None,
     ema: Optional[ExponentialMovingAverage] = None,
     max_grad_norm: Optional[float] = 10.0,
@@ -68,7 +69,7 @@ def train(
     valid_loss = np.inf
     patience_counter = 0
     swa_start = True
-    keep_last = False
+    keep_last = True
     if log_wandb:
         import wandb
 
@@ -85,6 +86,22 @@ def train(
                 logging.info(
                     f"Stopping optimization after {wall_clock_time} seconds of wall_clock time"
                 )
+                # Save the model
+                if ema is not None:
+                    with ema.average_parameters():
+                        checkpoint_handler.save(
+                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            epochs=epoch,
+                            keep_last=keep_last,
+                        )
+                        keep_last = True
+                else:
+                    checkpoint_handler.save(
+                        state=CheckpointState(model, optimizer, lr_scheduler),
+                        epochs=epoch,
+                        keep_last=keep_last,
+                    )
+                    keep_last = True
                 break
         # LR scheduler and SWA update
         if swa is None or epoch < swa.start:
@@ -228,14 +245,30 @@ def train(
                             epochs=epoch,
                             keep_last=keep_last,
                         )
-                        keep_last = False
+                        keep_last = True
                 else:
                     checkpoint_handler.save(
                         state=CheckpointState(model, optimizer, lr_scheduler),
                         epochs=epoch,
                         keep_last=keep_last,
                     )
-                    keep_last = False
+                    keep_last = True
+            if epoch % save_interval == 0:
+                if ema is not None:
+                    with ema.average_parameters():
+                        checkpoint_handler.save(
+                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            epochs=epoch,
+                            keep_last=keep_last,
+                        )
+                        keep_last = True
+                else:
+                    checkpoint_handler.save(
+                        state=CheckpointState(model, optimizer, lr_scheduler),
+                        epochs=epoch,
+                        keep_last=keep_last,
+                    )
+                    keep_last = True
         epoch += 1
 
     logging.info("Training complete")
