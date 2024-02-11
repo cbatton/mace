@@ -47,6 +47,7 @@ def train(
     max_num_epochs: int,
     patience: int,
     checkpoint_handler: CheckpointHandler,
+    checkpoint_handler_2: CheckpointHandler,
     logger: MetricsLogger,
     eval_interval: int,
     output_args: Dict[str, bool],
@@ -69,7 +70,7 @@ def train(
     valid_loss = np.inf
     patience_counter = 0
     swa_start = True
-    keep_last = True
+    keep_last = False
     if log_wandb:
         import wandb
 
@@ -89,19 +90,19 @@ def train(
                 # Save the model
                 if ema is not None:
                     with ema.average_parameters():
+                        keep_last = False
                         checkpoint_handler.save(
                             state=CheckpointState(model, optimizer, lr_scheduler),
                             epochs=epoch,
                             keep_last=keep_last,
                         )
-                        keep_last = True
                 else:
+                    keep_last = False
                     checkpoint_handler.save(
                         state=CheckpointState(model, optimizer, lr_scheduler),
                         epochs=epoch,
                         keep_last=keep_last,
                     )
-                    keep_last = True
                 break
         # LR scheduler and SWA update
         if swa is None or epoch < swa.start:
@@ -245,30 +246,28 @@ def train(
                             epochs=epoch,
                             keep_last=keep_last,
                         )
-                        keep_last = True
+                        keep_last = False
                 else:
                     checkpoint_handler.save(
                         state=CheckpointState(model, optimizer, lr_scheduler),
                         epochs=epoch,
                         keep_last=keep_last,
                     )
-                    keep_last = True
+                    keep_last = False
             if epoch % save_interval == 0:
                 if ema is not None:
                     with ema.average_parameters():
-                        checkpoint_handler.save(
+                        checkpoint_handler_2.save(
                             state=CheckpointState(model, optimizer, lr_scheduler),
                             epochs=epoch,
-                            keep_last=keep_last,
+                            keep_last=True,
                         )
-                        keep_last = True
                 else:
-                    checkpoint_handler.save(
+                    checkpoint_handler_2.save(
                         state=CheckpointState(model, optimizer, lr_scheduler),
                         epochs=epoch,
-                        keep_last=keep_last,
+                        keep_last=True,
                     )
-                    keep_last = True
         epoch += 1
 
     logging.info("Training complete")

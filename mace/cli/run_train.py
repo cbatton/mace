@@ -42,6 +42,7 @@ def main() -> None:
     except NameError:
         logging.info("mpi4py not found, running in serial mode")
     tag = tools.get_tag(name=args.name, seed=args.seed)
+    tag_2 = f"{tag}_2"
     # also add tag to directory names in args
     for key in ["log_dir", "results_dir", "checkpoints_dir", "model_dir"]:
         args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.seed)
@@ -460,6 +461,12 @@ def main() -> None:
         keep=args.keep_checkpoints,
         swa_start=args.start_swa,
     )
+    checkpoint_handler_2 = tools.CheckpointHandler(
+        directory=args.checkpoints_dir,
+        tag=tag_2,
+        keep=True,
+        swa_start=args.start_swa,
+    )
 
     start_epoch = 0
     if args.restart_latest:
@@ -511,6 +518,7 @@ def main() -> None:
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
         checkpoint_handler=checkpoint_handler,
+        checkpoint_handler_2=checkpoint_handler_2,
         eval_interval=args.eval_interval,
         start_epoch=start_epoch,
         max_num_epochs=args.max_num_epochs,
