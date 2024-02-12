@@ -22,10 +22,12 @@ class LoadFromFile(argparse.Action):
         if values.name.endswith("yaml") or values.name.endswith("yml"):
             # copy name attribute of values to new variable
             name = values.name
-            try:
-                name = name.replace(".", f"_{MPI.COMM_WORLD.Get_rank()}.")
-            except NameError:
-                pass
+            base = namespace.base
+            if not name[-6].isdigit():
+                try:
+                    name = name.replace(".", f"_{base+MPI.COMM_WORLD.Get_rank()}.")
+                except NameError:
+                    pass
 
             with open(name, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
