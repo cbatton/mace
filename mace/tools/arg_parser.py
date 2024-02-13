@@ -26,9 +26,6 @@ class LoadFromFile(argparse.Action):
 
             with open(name, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
-            # delete base key
-            if "base" in config:
-                del config["base"]
             for key in config.keys():
                 if key not in namespace:
                     raise ValueError(f"Unknown argument in config file: {key}")
