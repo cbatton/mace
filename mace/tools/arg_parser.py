@@ -8,12 +8,6 @@ import argparse
 import ast
 from typing import List, Optional, Union
 import yaml
-# if mpi, import mpi4py
-try:
-    from mpi4py import MPI
-except ImportError:
-    pass
-
 
 class LoadFromFile(argparse.Action):
     # parser.add_argument('--file', type=open, action=LoadFromFile)
@@ -23,14 +17,18 @@ class LoadFromFile(argparse.Action):
             # copy name attribute of values to new variable
             name = values.name
             base = namespace.base
-            if not name[-6].isdigit():
-                try:
-                    name = name.replace(".", f"_{base+MPI.COMM_WORLD.Get_rank()}.")
-                except NameError:
-                    pass
+            if namespace.mpi:
+                from mpi4py import MPI
+                base = base+MPI.COMM_WORLD.Get_rank()
+            if f"_{base}.yaml" not in name or f"_{base}.yml" not in name:
+                name = name.replace(".yaml", f"_{base}.yaml")
+                name = name.replace(".yml", f"_{base}.yml")
 
             with open(name, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
+            # delete base key
+            if "base" in config:
+                del config["base"]
             for key in config.keys():
                 if key not in namespace:
                     raise ValueError(f"Unknown argument in config file: {key}")
@@ -83,6 +81,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", help="experiment name")
     parser.add_argument("--seed", help="random seed", type=int, default=0)
     parser.add_argument("--base", help="base number", type=int, default=0)
+    parser.add_argument("--mpi", help="enable mpi", type=bool, default=True)
 
     # Directories
     parser.add_argument(
