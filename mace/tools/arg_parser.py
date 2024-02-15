@@ -20,9 +20,8 @@ class LoadFromFile(argparse.Action):
             if namespace.mpi:
                 from mpi4py import MPI
                 base = base+MPI.COMM_WORLD.Get_rank()
-            if f"_{base}.yaml" not in name or f"_{base}.yml" not in name:
+            if f"_{base}.yaml" not in name:
                 name = name.replace(".yaml", f"_{base}.yaml")
-                name = name.replace(".yml", f"_{base}.yml")
 
             with open(name, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
