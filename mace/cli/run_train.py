@@ -170,6 +170,8 @@ def main() -> None:
         loss_fn = modules.WeightedEnergyForcesLoss(
             energy_weight=args.energy_weight, forces_weight=args.forces_weight
         )
+    elif args.loss == "energies_only":
+        loss_fn = modules.EnergyLoss()
     elif args.loss == "forces_only":
         loss_fn = modules.WeightedForcesLoss(forces_weight=args.forces_weight)
     elif args.loss == "virials":
@@ -274,9 +276,7 @@ def main() -> None:
             **model_config,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],
-            interaction_cls_first=modules.interaction_classes[
-                "RealAgnosticInteractionBlock"
-            ],
+            interaction_cls_first=modules.interaction_classes[args.interaction_first],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
             atomic_inter_scale=std,
             atomic_inter_shift=0.0,
@@ -532,7 +532,7 @@ def main() -> None:
         max_grad_norm=args.clip_grad,
         log_errors=args.error_table,
         log_wandb=args.wandb,
-        wall_clock_time=args.wallclock_time,
+        wall_clock_time=args.wall_clock_time,
     )
 
     # Evaluation on test datasets
