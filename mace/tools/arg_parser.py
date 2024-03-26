@@ -20,7 +20,7 @@ class LoadFromFile(argparse.Action):
             if namespace.mpi:
                 from mpi4py import MPI
                 base = base+MPI.COMM_WORLD.Get_rank()
-            if f"_{base}.yaml" not in name:
+            if f"_{base}.yaml" not in name and base != -1:
                 name = name.replace(".yaml", f"_{base}.yaml")
 
             with open(name, "r") as f:
