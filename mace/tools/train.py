@@ -369,6 +369,9 @@ def evaluate(
             compute_stress=output_args["stress"],
         )
         batch = batch.cpu()
+        for key in output.keys():
+            if output[key] is not None:
+                output[key] = output[key].detach()
         output = tensor_dict_to_device(output, device=torch.device("cpu"))
 
         loss = loss_fn(pred=output, ref=batch)
