@@ -9,6 +9,11 @@ import ast
 from typing import List, Optional, Union
 import yaml
 
+def boolean_string(s):
+    if s not in {"False", "True", "false", "true"}:
+        raise ValueError("Not a valid boolean string")
+    return s == "True" or s == "true"
+
 class LoadFromFile(argparse.Action):
     # parser.add_argument('--file', type=open, action=LoadFromFile)
     def __call__(self, parser, namespace, values, option_string=None):
@@ -79,7 +84,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", help="experiment name")
     parser.add_argument("--seed", help="random seed", type=int, default=0)
     parser.add_argument("--base", help="base number", type=int, default=0)
-    parser.add_argument("--mpi", help="enable mpi", type=bool, default=True)
+    parser.add_argument("--mpi", help="enable mpi", type=boolean_string, default=True)
 
     # Directories
     parser.add_argument(
@@ -258,19 +263,19 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compute_avg_num_neighbors",
         help="normalization factor for the message",
-        type=bool,
+        type=boolean_string,
         default=True,
     )
     parser.add_argument(
         "--compute_stress",
         help="Select True to compute stress",
-        type=bool,
+        type=boolean_string,
         default=False,
     )
     parser.add_argument(
         "--compute_forces",
         help="Select True to compute forces",
-        type=bool,
+        type=boolean_string,
         default=True,
     )
 
