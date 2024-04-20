@@ -142,19 +142,25 @@ def create_error_table(
         import wandb
     table = PrettyTable()
     if table_type == "TotalRMSE":
-        table.field_names = [
-            "config_type",
-            "RMSE E / meV",
-            "RMSE F / meV / A",
-            "relative F RMSE %",
-        ]
+        if output_args["forces"]:
+            table.field_names = [
+                "config_type",
+                "RMSE E / meV",
+                "RMSE F / meV / A",
+                "relative F RMSE %",
+            ]
+        else:
+            table.field_names = ["config_type", "RMSE E / meV"]
     elif table_type == "PerAtomRMSE":
-        table.field_names = [
-            "config_type",
-            "RMSE E / meV / atom",
-            "RMSE F / meV / A",
-            "relative F RMSE %",
-        ]
+        if output_args["forces"]:
+            table.field_names = [
+                "config_type",
+                "RMSE E / meV / atom",
+                "RMSE F / meV / A",
+                "relative F RMSE %",
+            ]
+        else:
+            table.field_names = ["config_type", "RMSE E / meV / atom"]
     elif table_type == "PerAtomRMSEstressvirials":
         table.field_names = [
             "config_type",
@@ -164,19 +170,25 @@ def create_error_table(
             "RMSE Stress (Virials) / meV / A (A^3)",
         ]
     elif table_type == "TotalMAE":
-        table.field_names = [
-            "config_type",
-            "MAE E / meV",
-            "MAE F / meV / A",
-            "relative F MAE %",
-        ]
+        if output_args["forces"]:
+            table.field_names = [
+                "config_type",
+                "MAE E / meV",
+                "MAE F / meV / A",
+                "relative F MAE %",
+            ]
+        else:
+            table.field_names = ["config_type", "MAE E / meV"]
     elif table_type == "PerAtomMAE":
-        table.field_names = [
-            "config_type",
-            "MAE E / meV / atom",
-            "MAE F / meV / A",
-            "relative F MAE %",
-        ]
+        if output_args["forces"]:
+            table.field_names = [
+                "config_type",
+                "MAE E / meV / atom",
+                "MAE F / meV / A",
+                "relative F MAE %",
+            ]
+        else:
+            table.field_names = ["config_type", "MAE E / meV / atom"]
     elif table_type == "DipoleRMSE":
         table.field_names = [
             "config_type",
@@ -227,23 +239,29 @@ def create_error_table(
             }
             wandb.log(wandb_log_dict)
         if table_type == "TotalRMSE":
-            table.add_row(
-                [
-                    name,
-                    f"{metrics['rmse_e'] * 1000:.1f}",
-                    f"{metrics['rmse_f'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_f']:.2f}",
-                ]
-            )
+            if output_args["forces"]:
+                table.add_row(
+                    [
+                        name,
+                        f"{metrics['rmse_e'] * 1000:.1f}",
+                        f"{metrics['rmse_f'] * 1000:.1f}",
+                        f"{metrics['rel_rmse_f']:.2f}",
+                    ]
+                )
+            else:
+                table.add_row([name, f"{metrics['rmse_e'] * 1000:.1f}"])
         elif table_type == "PerAtomRMSE":
-            table.add_row(
-                [
-                    name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
-                    f"{metrics['rmse_f'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_f']:.2f}",
-                ]
-            )
+            if output_args["forces"]:
+                table.add_row(
+                    [
+                        name,
+                        f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
+                        f"{metrics['rmse_f'] * 1000:.1f}",
+                        f"{metrics['rel_rmse_f']:.2f}",
+                    ]
+                )
+            else:
+                table.add_row([name, f"{metrics['rmse_e_per_atom'] * 1000:.1f}"])
         elif (
             table_type == "PerAtomRMSEstressvirials"
             and metrics["rmse_stress"] is not None
@@ -271,23 +289,29 @@ def create_error_table(
                 ]
             )
         elif table_type == "TotalMAE":
-            table.add_row(
-                [
-                    name,
-                    f"{metrics['mae_e'] * 1000:.1f}",
-                    f"{metrics['mae_f'] * 1000:.1f}",
-                    f"{metrics['rel_mae_f']:.2f}",
-                ]
-            )
+            if output_args["forces"]:
+                table.add_row(
+                    [
+                        name,
+                        f"{metrics['mae_e'] * 1000:.1f}",
+                        f"{metrics['mae_f'] * 1000:.1f}",
+                        f"{metrics['rel_mae_f']:.2f}",
+                    ]
+                )
+            else:
+                table.add_row([name, f"{metrics['mae_e'] * 1000:.1f}"])
         elif table_type == "PerAtomMAE":
-            table.add_row(
-                [
-                    name,
-                    f"{metrics['mae_e_per_atom'] * 1000:.1f}",
-                    f"{metrics['mae_f'] * 1000:.1f}",
-                    f"{metrics['rel_mae_f']:.2f}",
-                ]
-            )
+            if output_args["forces"]:
+                table.add_row(
+                    [
+                        name,
+                        f"{metrics['mae_e_per_atom'] * 1000:.1f}",
+                        f"{metrics['mae_f'] * 1000:.1f}",
+                        f"{metrics['rel_mae_f']:.2f}",
+                    ]
+                )
+            else:
+                table.add_row([name, f"{metrics['mae_e_per_atom'] * 1000:.1f}"])
         elif table_type == "DipoleRMSE":
             table.add_row(
                 [
