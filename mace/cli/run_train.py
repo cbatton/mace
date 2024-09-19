@@ -4,16 +4,22 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import argparse
 import ast
+import glob
 import json
 import logging
+import os
+from copy import deepcopy
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
+import torch.distributed
 import torch.nn.functional
 from e3nn import o3
 from torch.optim.swa_utils import SWALR, AveragedModel
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch_ema import ExponentialMovingAverage
 
 import mace
@@ -24,6 +30,7 @@ from mace.tools.scripts_utils import (
     create_error_table,
     get_dataset_from_xyz,
 )
+from mace.tools.slurm_distributed import DistributedEnvironment
 
 # if mpi, import mpi4py
 try:
@@ -34,22 +41,42 @@ except ImportError:
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
     tools.save_argparse(args, "test.yaml", exclude="conf")
-    try:
-        logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        args.seed += rank
-    except NameError:
-        logging.info("mpi4py not found, running in serial mode")
+    if args.mpi and args.distributed:
+        raise ValueError("Cannot run in both MPI and distributed mode")
+    elif args.mpi:
+        try:
+            logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            args.seed += rank
+            rank = 0
+        except NameError:
+            logging.info("mpi4py not found, running in serial mode")
+    elif args.distributed:
+        try:
+            distr_env = DistributedEnvironment()
+        except Exception as e:  # pylint: disable=W0703
+            logging.error(f"Failed to initialize distributed environment: {e}")
+            return
+        world_size = distr_env.world_size
+        local_rank = distr_env.local_rank
+        rank = distr_env.rank
+        if rank == 0:
+            print(distr_env)
+        torch.distributed.init_process_group(backend="nccl")
     tag = tools.get_tag(name=args.name, seed=args.seed)
     tag_2 = f"{tag}_2"
     # also add tag to directory names in args
-    for key in ["log_dir", "results_dir", "checkpoints_dir", "model_dir"]:
-        args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.seed)
+    for key in ["log_dir", "results_dir", "checkpoints_dir", "model_dir", "wandb_name"]:
+        args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.base)
 
     # Setup
     tools.set_seeds(args.seed)
-    tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir)
+    tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir, rank=rank)
+    if args.distributed:
+        torch.cuda.set_device(local_rank)
+        logging.info(f"Process group initialized: {torch.distributed.is_initialized()}")
+        logging.info(f"Processes: {world_size}")
     try:
         logging.info(f"MACE version: {mace.__version__}")
     except AttributeError:
@@ -146,23 +173,51 @@ def main() -> None:
         )
         logging.info(f"Atomic energies: {atomic_energies.tolist()}")
 
+    train_set = [
+        data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+        for config in collections.train
+    ]
+    valid_set = [
+        data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+        for config in collections.valid
+    ]
+    train_sampler, valid_sampler = None, None
+    if args.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+                train_set,
+                num_replicas=world_size,
+                rank=rank,
+                shuffle=True,
+                drop_last=True,
+                seed=args.seed,
+        )
+        valid_sampler = torch.utils.data.distributed.DistributedSampler(
+                valid_set,
+                num_replicas=world_size,
+                rank=rank,
+                shuffle=False,
+                drop_last=False,
+                seed=args.seed,
+        )
     train_loader = torch_geometric.dataloader.DataLoader(
-        dataset=[
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
-            for config in collections.train
-        ],
-        batch_size=args.batch_size,
-        shuffle=True,
-        drop_last=True,
+        dataset=train_set,
+        batch_size=args.train_batch_size,
+        sampler=train_sampler,
+        shuffle=(train_sampler is None),
+        drop_last=(train_sampler is None),
+        pin_memory=args.pin_memory,
+        num_workers=args.num_workers,
+        generator=torch.Generator().manual_seed(args.seed),
     )
     valid_loader = torch_geometric.dataloader.DataLoader(
-        dataset=[
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
-            for config in collections.valid
-        ],
+        dataset=valid_set,
         batch_size=args.valid_batch_size,
+        sampler=valid_sampler,
         shuffle=False,
         drop_last=False,
+        pin_memory=args.pin_memory,
+        num_workers=args.num_workers,
+        generator=torch.Generator().manual_seed(args.seed),
     )
 
     loss_fn: torch.nn.Module
@@ -510,6 +565,11 @@ def main() -> None:
         )
         wandb.run.summary["params"] = args_dict_json
 
+    if args.distributed:
+        distributed_model = DDP(model, device_ids=[local_rank])
+    else:
+        distributed_model = None
+
     tools.train(
         model=model,
         loss_fn=loss_fn,
@@ -532,16 +592,19 @@ def main() -> None:
         max_grad_norm=args.clip_grad,
         log_errors=args.error_table,
         log_wandb=args.wandb,
+        distributed=args.distributed,
+        distributed_model=distributed_model,
+        train_sampler=train_sampler,
+        rank=rank,
         wall_clock_time=args.wall_clock_time,
     )
 
     # Evaluation on test datasets
     logging.info("Computing metrics for training, validation, and test sets")
 
-    all_collections = [
-        ("train", collections.train),
-        ("valid", collections.valid),
-    ] + collections.tests
+    train_valid_data_loader = {}
+    train_valid_data_loader["train"] = train_loader
+    train_valid_data_loader["valid"] = valid_loader
 
     for swa_eval in swas:
         epoch = checkpoint_handler.load_latest(
@@ -550,40 +613,48 @@ def main() -> None:
             device=device,
         )
         model.to(device)
+        if args.distributed:
+            distributed_model = DDP(model, device_ids=[local_rank])
+        model_to_evaluate = model if not args.distributed else distributed_model
         logging.info(f"Loaded model from epoch {epoch}")
 
         for param in model.parameters():
             param.requires_grad = False
         table = create_error_table(
             table_type=args.error_table,
-            all_collections=all_collections,
-            z_table=z_table,
-            r_max=args.r_max,
-            valid_batch_size=args.valid_batch_size,
-            model=model,
+            all_data_loaders=train_valid_data_loader,
+            model=model_to_evaluate,
             loss_fn=loss_fn,
             output_args=output_args,
             log_wandb=args.wandb,
             device=device,
+            distributed=args.distributed,
         )
         logging.info("\n" + str(table))
 
-        # Save entire model
-        if swa_eval:
-            model_path = Path(args.checkpoints_dir) / (tag + "_swa.model")
-        else:
-            model_path = Path(args.checkpoints_dir) / (tag + ".model")
-        logging.info(f"Saving model to {model_path}")
-        if args.save_cpu:
-            model = model.to("cpu")
-        torch.save(model, model_path)
+        if rank == 0:
+            # Save entire model
+            if not Path(args.model_dir).exists():
+                Path(args.model_dir).mkdir(parents=True, exist_ok=True)
+            if swa_eval:
+                model_path = Path(args.checkpoints_dir) / (tag + "_swa.model")
+            else:
+                model_path = Path(args.checkpoints_dir) / (tag + ".model")
+            logging.info(f"Saving model to {model_path}")
+            if args.save_cpu:
+                model = model.to("cpu")
+            torch.save(model, model_path)
 
-        if swa_eval:
-            torch.save(model, Path(args.model_dir) / (args.name + "_swa.model"))
-        else:
-            torch.save(model, Path(args.model_dir) / (args.name + ".model"))
+            if swa_eval:
+                torch.save(model, Path(args.model_dir) / (args.name + "_swa.model"))
+            else:
+                torch.save(model, Path(args.model_dir) / (args.name + ".model"))
+        if args.distributed:
+            torch.distributed.barrier()
 
     logging.info("Done")
+    if args.distributed:
+        torch.distributed.destroy_process_group()
 
 
 if __name__ == "__main__":
