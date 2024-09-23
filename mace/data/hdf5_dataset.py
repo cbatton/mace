@@ -72,3 +72,20 @@ class HDF5Dataset(Dataset):
             cutoff=self.r_max,
         )
         return atomic_data
+
+
+
+def dataset_from_sharded_hdf5(
+    files: List, z_table: AtomicNumberTable, r_max: float, **kwargs
+):
+    files = glob(files + "/*")
+    datasets = []
+    for file in files:
+        datasets.append(HDF5Dataset(file, z_table=z_table, r_max=r_max, **kwargs))
+    full_dataset = ConcatDataset(datasets)
+    return full_dataset
+
+
+def unpack_value(value):
+    value = value.decode("utf-8") if isinstance(value, bytes) else value
+    return None if str(value) == "None" else value
