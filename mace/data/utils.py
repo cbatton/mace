@@ -6,10 +6,12 @@
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import ase.data
 import ase.io
+import h5py
 import numpy as np
 
 from mace.tools import AtomicNumberTable
@@ -52,7 +54,7 @@ Configurations = List[Configuration]
 
 
 def random_train_valid_split(
-    items: Sequence, valid_fraction: float, seed: int
+    items: Sequence, valid_fraction: float, seed: int, work_dir: str
 ) -> Tuple[List, List]:
     assert 0.0 < valid_fraction < 1.0
 
@@ -63,20 +65,29 @@ def random_train_valid_split(
     rng = np.random.default_rng(seed)
     rng.shuffle(indices)
 
+    # Save the indices for reproducibility
+    # make sure the directory exists
+    Path(work_dir).mkdir(parents=True, exist_ok=True)
+    work_dir = Path(work_dir)
+    indices_train = indices[:train_size]
+    indices_valid = indices[train_size:]
+    np.save(work_dir / "train_indices.npy", indices_train)
+    np.save(work_dir / "valid_indices.npy", indices_valid)
+
     return (
-        [items[i] for i in indices[:train_size]],
-        [items[i] for i in indices[train_size:]],
+        [items[i] for i in indices_train],
+        [items[i] for i in indices_valid],
     )
 
 
 def config_from_atoms_list(
     atoms_list: List[ase.Atoms],
-    energy_key="energy",
-    forces_key="forces",
-    stress_key="stress",
-    virials_key="virials",
-    dipole_key="dipole",
-    charges_key="charges",
+    energy_key="REF_energy",
+    forces_key="REF_forces",
+    stress_key="REF_stress",
+    virials_key="REF_virials",
+    dipole_key="REF_dipole",
+    charges_key="REF_charges",
     config_type_weights: Dict[str, float] = None,
 ) -> Configurations:
     """Convert list of ase.Atoms into Configurations"""
@@ -102,12 +113,12 @@ def config_from_atoms_list(
 
 def config_from_atoms(
     atoms: ase.Atoms,
-    energy_key="energy",
-    forces_key="forces",
-    stress_key="stress",
-    virials_key="virials",
-    dipole_key="dipole",
-    charges_key="charges",
+    energy_key="REF_energy",
+    forces_key="REF_forces",
+    stress_key="REF_stress",
+    virials_key="REF_virials",
+    dipole_key="REF_dipole",
+    charges_key="REF_charges",
     config_type_weights: Dict[str, float] = None,
 ) -> Configuration:
     """Convert ase.Atoms to Configuration"""
@@ -116,7 +127,7 @@ def config_from_atoms(
 
     energy = atoms.info.get(energy_key, None)  # eV
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
-    stress = atoms.info.get(stress_key, None)  # eV / Ang
+    stress = atoms.info.get(stress_key, None)  # eV / Ang^3
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
     # Charges default to 0 instead of None if not found
@@ -148,6 +159,8 @@ def config_from_atoms(
     if virials is None:
         virials = np.zeros((3, 3))
         virials_weight = 0.0
+    if dipole is None:
+        dipole = np.zeros(3)
 
     return Configuration(
         atomic_numbers=atomic_numbers,
@@ -188,16 +201,47 @@ def test_config_types(
 def load_from_xyz(
     file_path: str,
     config_type_weights: Dict,
-    energy_key: str = "energy",
-    forces_key: str = "forces",
-    stress_key: str = "stress",
-    virials_key: str = "virials",
-    dipole_key: str = "dipole",
-    charges_key: str = "charges",
+    energy_key: str = "REF_energy",
+    forces_key: str = "REF_forces",
+    stress_key: str = "REF_stress",
+    virials_key: str = "REF_virials",
+    dipole_key: str = "REF_dipole",
+    charges_key: str = "REF_charges",
     extract_atomic_energies: bool = False,
 ) -> Tuple[Dict[int, float], Configurations]:
     atoms_list = ase.io.read(file_path, index=":")
-
+    if energy_key == "energy":
+        logging.warning(
+            "Since ASE version 3.23.0b1, using energy_key 'energy' is no longer safe when communicating between MACE and ASE. We recommend using a different key, rewriting 'energy' to 'REF_energy'. You need to use --energy_key='REF_energy' to specify the chosen key name."
+        )
+        energy_key = "REF_energy"
+        for atoms in atoms_list:
+            try:
+                atoms.info["REF_energy"] = atoms.get_potential_energy()
+            except Exception as e:  # pylint: disable=W0703
+                logging.error(f"Failed to extract energy: {e}")
+                atoms.info["REF_energy"] = None
+    if forces_key == "forces":
+        logging.warning(
+            "Since ASE version 3.23.0b1, using forces_key 'forces' is no longer safe when communicating between MACE and ASE. We recommend using a different key, rewriting 'forces' to 'REF_forces'. You need to use --forces_key='REF_forces' to specify the chosen key name."
+        )
+        forces_key = "REF_forces"
+        for atoms in atoms_list:
+            try:
+                atoms.arrays["REF_forces"] = atoms.get_forces()
+            except Exception as e:  # pylint: disable=W0703
+                logging.error(f"Failed to extract forces: {e}")
+                atoms.arrays["REF_forces"] = None
+    if stress_key == "stress":
+        logging.warning(
+            "Since ASE version 3.23.0b1, using stress_key 'stress' is no longer safe when communicating between MACE and ASE. We recommend using a different key, rewriting 'stress' to 'REF_stress'. You need to use --stress_key='REF_stress' to specify the chosen key name."
+        )
+        stress_key = "REF_stress"
+        for atoms in atoms_list:
+            try:
+                atoms.info["REF_stress"] = atoms.get_stress()
+            except Exception as e:  # pylint: disable=W0703
+                atoms.info["REF_stress"] = None
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
 
@@ -210,9 +254,9 @@ def load_from_xyz(
                 isolated_atom_config = atoms.info.get("config_type") == "IsolatedAtom"
                 if isolated_atom_config:
                     if energy_key in atoms.info.keys():
-                        atomic_energies_dict[
-                            atoms.get_atomic_numbers()[0]
-                        ] = atoms.info[energy_key]
+                        atomic_energies_dict[atoms.get_atomic_numbers()[0]] = (
+                            atoms.info[energy_key]
+                        )
                     else:
                         logging.warning(
                             f"Configuration '{idx}' is marked as 'IsolatedAtom' "
@@ -260,10 +304,83 @@ def compute_average_E0s(
         for i, z in enumerate(z_table.zs):
             atomic_energies_dict[z] = E0s[i]
     except np.linalg.LinAlgError:
-        logging.warning(
+        logging.error(
             "Failed to compute E0s using least squares regression, using the same for all atoms"
         )
         atomic_energies_dict = {}
         for i, z in enumerate(z_table.zs):
             atomic_energies_dict[z] = 0.0
     return atomic_energies_dict
+
+
+def save_dataset_as_HDF5(dataset: List, out_name: str) -> None:
+    with h5py.File(out_name, "w") as f:
+        for i, data in enumerate(dataset):
+            grp = f.create_group(f"config_{i}")
+            grp["num_nodes"] = data.num_nodes
+            grp["edge_index"] = data.edge_index
+            grp["positions"] = data.positions
+            grp["shifts"] = data.shifts
+            grp["unit_shifts"] = data.unit_shifts
+            grp["cell"] = data.cell
+            grp["node_attrs"] = data.node_attrs
+            grp["weight"] = data.weight
+            grp["energy_weight"] = data.energy_weight
+            grp["forces_weight"] = data.forces_weight
+            grp["stress_weight"] = data.stress_weight
+            grp["virials_weight"] = data.virials_weight
+            grp["forces"] = data.forces
+            grp["energy"] = data.energy
+            grp["stress"] = data.stress
+            grp["virials"] = data.virials
+            grp["dipole"] = data.dipole
+            grp["charges"] = data.charges
+
+
+def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
+    grp = h5_file.create_group(f"config_{i}")
+    grp["num_nodes"] = data.num_nodes
+    grp["edge_index"] = data.edge_index
+    grp["positions"] = data.positions
+    grp["shifts"] = data.shifts
+    grp["unit_shifts"] = data.unit_shifts
+    grp["cell"] = data.cell
+    grp["node_attrs"] = data.node_attrs
+    grp["weight"] = data.weight
+    grp["energy_weight"] = data.energy_weight
+    grp["forces_weight"] = data.forces_weight
+    grp["stress_weight"] = data.stress_weight
+    grp["virials_weight"] = data.virials_weight
+    grp["forces"] = data.forces
+    grp["energy"] = data.energy
+    grp["stress"] = data.stress
+    grp["virials"] = data.virials
+    grp["dipole"] = data.dipole
+    grp["charges"] = data.charges
+
+
+def save_configurations_as_HDF5(configurations: Configurations, _, h5_file) -> None:
+    grp = h5_file.create_group("config_batch_0")
+    for j, config in enumerate(configurations):
+        subgroup_name = f"config_{j}"
+        subgroup = grp.create_group(subgroup_name)
+        subgroup["atomic_numbers"] = write_value(config.atomic_numbers)
+        subgroup["positions"] = write_value(config.positions)
+        subgroup["energy"] = write_value(config.energy)
+        subgroup["forces"] = write_value(config.forces)
+        subgroup["stress"] = write_value(config.stress)
+        subgroup["virials"] = write_value(config.virials)
+        subgroup["dipole"] = write_value(config.dipole)
+        subgroup["charges"] = write_value(config.charges)
+        subgroup["cell"] = write_value(config.cell)
+        subgroup["pbc"] = write_value(config.pbc)
+        subgroup["weight"] = write_value(config.weight)
+        subgroup["energy_weight"] = write_value(config.energy_weight)
+        subgroup["forces_weight"] = write_value(config.forces_weight)
+        subgroup["stress_weight"] = write_value(config.stress_weight)
+        subgroup["virials_weight"] = write_value(config.virials_weight)
+        subgroup["config_type"] = write_value(config.config_type)
+
+
+def write_value(value):
+    return value if value is not None else "None"

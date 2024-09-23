@@ -7,12 +7,15 @@
 import argparse
 import ast
 from typing import List, Optional, Union
+
 import yaml
+
 
 def boolean_string(s):
     if s not in {"False", "True", "false", "true"}:
         raise ValueError("Not a valid boolean string")
     return s == "True" or s == "true"
+
 
 class LoadFromFile(argparse.Action):
     # parser.add_argument('--file', type=open, action=LoadFromFile)
@@ -24,7 +27,8 @@ class LoadFromFile(argparse.Action):
             base = namespace.base
             if namespace.mpi:
                 from mpi4py import MPI
-                base = base+MPI.COMM_WORLD.Get_rank()
+
+                base = base + MPI.COMM_WORLD.Get_rank()
             if f"_{base}.yaml" not in name and base != -1:
                 name = name.replace(".yaml", f"_{base}.yaml")
 
@@ -280,9 +284,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
 
     # Dataset
-    parser.add_argument(
-        "--train_file", help="Training set xyz file", type=str
-    )
+    parser.add_argument("--train_file", help="Training set xyz file", type=str)
     parser.add_argument(
         "--valid_file",
         help="Validation set xyz file",

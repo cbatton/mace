@@ -18,8 +18,8 @@ import numpy as np
 import torch.distributed
 import torch.nn.functional
 from e3nn import o3
-from torch.optim.swa_utils import SWALR, AveragedModel
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim.swa_utils import SWALR, AveragedModel
 from torch_ema import ExponentialMovingAverage
 
 import mace
@@ -37,6 +37,7 @@ try:
     from mpi4py import MPI
 except ImportError:
     pass
+
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
@@ -184,20 +185,20 @@ def main() -> None:
     train_sampler, valid_sampler = None, None
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
-                train_set,
-                num_replicas=world_size,
-                rank=rank,
-                shuffle=True,
-                drop_last=True,
-                seed=args.seed,
+            train_set,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+            drop_last=True,
+            seed=args.seed,
         )
         valid_sampler = torch.utils.data.distributed.DistributedSampler(
-                valid_set,
-                num_replicas=world_size,
-                rank=rank,
-                shuffle=False,
-                drop_last=False,
-                seed=args.seed,
+            valid_set,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=False,
+            drop_last=False,
+            seed=args.seed,
         )
     train_loader = torch_geometric.dataloader.DataLoader(
         dataset=train_set,

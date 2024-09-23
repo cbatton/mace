@@ -160,11 +160,11 @@ def get_edge_vectors_and_lengths(
 
 
 def _check_non_zero(std):
-    if std == 0.0:
+    if np.any(std == 0):
         logging.warning(
             "Standard deviation of the scaling is zero, Changing to no scaling"
         )
-        std = 1.0
+        std[std == 0] = 1
     return std
 
 
