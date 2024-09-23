@@ -632,8 +632,25 @@ def main() -> None:
         )
         logging.info("\n" + str(table))
 
-        if rank == 0:
+        if not args.distributed:
             # Save entire model
+            if not Path(args.model_dir).exists():
+                Path(args.model_dir).mkdir(parents=True, exist_ok=True)
+            if swa_eval:
+                model_path = Path(args.checkpoints_dir) / (tag + "_swa.model")
+            else:
+                model_path = Path(args.checkpoints_dir) / (tag + ".model")
+            logging.info(f"Saving model to {model_path}")
+            if args.save_cpu:
+                model = model.to("cpu")
+            torch.save(model, model_path)
+
+            if swa_eval:
+                torch.save(model, Path(args.model_dir) / (args.name + "_swa.model"))
+            else:
+                torch.save(model, Path(args.model_dir) / (args.name + ".model"))
+        elif rank == 0:
+            # Save entire model on rank 0
             if not Path(args.model_dir).exists():
                 Path(args.model_dir).mkdir(parents=True, exist_ok=True)
             if swa_eval:
