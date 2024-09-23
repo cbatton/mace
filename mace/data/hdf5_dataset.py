@@ -74,7 +74,6 @@ class HDF5Dataset(Dataset):
         return atomic_data
 
 
-
 def dataset_from_sharded_hdf5(
     files: List, z_table: AtomicNumberTable, r_max: float, **kwargs
 ):
