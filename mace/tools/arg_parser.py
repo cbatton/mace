@@ -29,7 +29,7 @@ class LoadFromFile(argparse.Action):
                 from mpi4py import MPI
 
                 base = base + MPI.COMM_WORLD.Get_rank()
-            if f"_{base}.yaml" not in name and base != -1:
+            if f"_{base}.yaml" not in name and namespace.input_val:
                 name = name.replace(".yaml", f"_{base}.yaml")
 
             with open(name, "r") as f:  # pylint: disable=W1514
@@ -89,6 +89,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", help="random seed", type=int, default=0)
     parser.add_argument("--base", help="base number", type=int, default=0)
     parser.add_argument("--mpi", help="enable mpi", type=boolean_string, default=True)
+    parser.add_argument(
+        "--input_val",
+        help="expand input name with base",
+        type=boolean_string,
+        default=True,
+    )
 
     # Directories
     parser.add_argument(
@@ -128,7 +134,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--distributed",
         help="train in multi-GPU data parallel mode",
-        action="store_true",
+        type=boolean_string,
         default=False,
     )
     parser.add_argument("--log_level", help="log level", type=str, default="INFO")
