@@ -4,15 +4,11 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import argparse
 import ast
-import glob
 import json
 import logging
-import os
-from copy import deepcopy
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 import torch.distributed
@@ -44,7 +40,10 @@ def main() -> None:
     tools.save_argparse(args, "test.yaml", exclude="conf")
     if args.mpi and args.distributed:
         raise ValueError("Cannot run in both MPI and distributed mode")
-    elif args.mpi:
+    rank = 0
+    local_rank = 0
+    world_size = 1
+    if args.mpi:
         try:
             logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
             comm = MPI.COMM_WORLD
@@ -73,7 +72,13 @@ def main() -> None:
 
     # Setup
     tools.set_seeds(args.seed)
-    tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir, rank=rank)
+    tools.setup_logger(
+        level=args.log_level,
+        tag=tag,
+        directory=args.log_dir,
+        rank=rank,
+        distributed=args.distributed,
+    )
     if args.distributed:
         torch.cuda.set_device(local_rank)
         logging.info(f"Process group initialized: {torch.distributed.is_initialized()}")
@@ -97,6 +102,7 @@ def main() -> None:
 
     # Data preparation
     collections, atomic_energies_dict = get_dataset_from_xyz(
+        log_dir=args.log_dir,
         train_path=args.train_file,
         valid_path=args.valid_file,
         valid_fraction=args.valid_fraction,
@@ -464,6 +470,7 @@ def main() -> None:
     if args.swa:
         assert dipole_only is False, "swa for dipole fitting not implemented"
         swas.append(True)
+        loss_fn_energy: torch.nn.Module
         if args.start_swa is None:
             args.start_swa = (
                 args.max_num_epochs // 4 * 3
@@ -563,6 +570,7 @@ def main() -> None:
             entity=args.wandb_entity,
             name=args.wandb_name,
             config=wandb_config,
+            directory=args.wandb_dir,
         )
         wandb.run.summary["params"] = args_dict_json
 

@@ -50,6 +50,8 @@ def setup_logger(
     level: Union[int, str] = logging.INFO,
     tag: Optional[str] = None,
     directory: Optional[str] = None,
+    rank: Optional[int] = 0,
+    distributed: bool = False,
 ):
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -59,11 +61,16 @@ def setup_logger(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    if distributed:
+        # Add filter for rank
+        logger.addFilter(lambda _: rank == 0)
+
+    # Create console handler
     ch = logging.StreamHandler(stream=sys.stdout)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    if (directory is not None) and (tag is not None):
+    if directory is not None and tag is not None:
         os.makedirs(name=directory, exist_ok=True)
         path = os.path.join(directory, tag + ".log")
         fh = logging.FileHandler(path)

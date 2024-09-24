@@ -12,8 +12,7 @@ import torch
 from prettytable import PrettyTable
 
 from mace import data
-from mace.data import AtomicData
-from mace.tools import AtomicNumberTable, evaluate, torch_geometric
+from mace.tools import evaluate
 
 
 @dataclasses.dataclass
@@ -24,18 +23,19 @@ class SubsetCollection:
 
 
 def get_dataset_from_xyz(
+    log_dir: str,
     train_path: str,
     valid_path: str,
     valid_fraction: float,
     config_type_weights: Dict,
     test_path: str = None,
     seed: int = 1234,
-    energy_key: str = "energy",
-    forces_key: str = "forces",
-    stress_key: str = "stress",
-    virials_key: str = "virials",
-    dipole_key: str = "dipoles",
-    charges_key: str = "charges",
+    energy_key: str = "REF_energy",
+    forces_key: str = "REF_forces",
+    stress_key: str = "REF_stress",
+    virials_key: str = "REF_virials",
+    dipole_key: str = "REF_dipoles",
+    charges_key: str = "REF_charges",
 ) -> Tuple[SubsetCollection, Optional[Dict[int, float]]]:
     """Load training and test dataset from xyz file"""
     atomic_energies_dict, all_train_configs = data.load_from_xyz(
@@ -73,7 +73,7 @@ def get_dataset_from_xyz(
             "Using random %s%% of training set for validation", 100 * valid_fraction
         )
         train_configs, valid_configs = data.random_train_valid_split(
-            all_train_configs, valid_fraction, seed
+            all_train_configs, valid_fraction, seed, log_dir
         )
 
     test_configs = []
@@ -84,6 +84,8 @@ def get_dataset_from_xyz(
             energy_key=energy_key,
             forces_key=forces_key,
             dipole_key=dipole_key,
+            stress_key=stress_key,
+            virials_key=virials_key,
             charges_key=charges_key,
             extract_atomic_energies=False,
         )
@@ -118,7 +120,9 @@ class LRScheduler:
         if self.scheduler == "ExponentialLR":
             self.lr_scheduler.step(epoch=epoch)
         elif self.scheduler == "ReduceLROnPlateau":
-            self.lr_scheduler.step(metrics=metrics, epoch=epoch)
+            self.lr_scheduler.step(  # pylint: disable=E1123
+                metrics=metrics, epoch=epoch
+            )
 
     def __getattr__(self, name):
         if name == "step":
@@ -126,17 +130,28 @@ class LRScheduler:
         return getattr(self.lr_scheduler, name)
 
 
+def custom_key(key):
+    """
+    Helper function to sort the keys of the data loader dictionary
+    to ensure that the training set, and validation set
+    are evaluated first
+    """
+    if key == "train":
+        return (0, key)
+    if key == "valid":
+        return (1, key)
+    return (2, key)
+
+
 def create_error_table(
     table_type: str,
-    all_collections: list,
-    z_table: AtomicNumberTable,
-    r_max: float,
-    valid_batch_size: int,
+    all_data_loaders: dict,
     model: torch.nn.Module,
     loss_fn: torch.nn.Module,
     output_args: Dict[str, bool],
     log_wandb: bool,
     device: str,
+    distributed: bool = False,
 ) -> PrettyTable:
     if log_wandb:
         import wandb
@@ -210,17 +225,9 @@ def create_error_table(
             "RMSE MU / mDebye / atom",
             "rel MU RMSE %",
         ]
-    for name, subset in all_collections:
-        data_loader = torch_geometric.dataloader.DataLoader(
-            dataset=[
-                AtomicData.from_config(config, z_table=z_table, cutoff=r_max)
-                for config in subset
-            ],
-            batch_size=valid_batch_size,
-            shuffle=False,
-            drop_last=False,
-        )
 
+    for name in sorted(all_data_loaders, key=custom_key):
+        data_loader = all_data_loaders[name]
         logging.info(f"Evaluating {name} ...")
         _, metrics = evaluate(
             model,
@@ -229,6 +236,11 @@ def create_error_table(
             output_args=output_args,
             device=device,
         )
+        if distributed:
+            torch.distributed.barrier()
+
+        del data_loader
+        torch.cuda.empty_cache()
         if log_wandb:
             wandb_log_dict = {
                 name
@@ -243,25 +255,25 @@ def create_error_table(
                 table.add_row(
                     [
                         name,
-                        f"{metrics['rmse_e'] * 1000:.1f}",
-                        f"{metrics['rmse_f'] * 1000:.1f}",
-                        f"{metrics['rel_rmse_f']:.2f}",
+                        f"{metrics['rmse_e'] * 1000:8.3f}",
+                        f"{metrics['rmse_f'] * 1000:8.3f}",
+                        f"{metrics['rel_rmse_f']:8.3f}",
                     ]
                 )
             else:
-                table.add_row([name, f"{metrics['rmse_e'] * 1000:.1f}"])
+                table.add_row([name, f"{metrics['rmse_e'] * 1000:8.3f}"])
         elif table_type == "PerAtomRMSE":
             if output_args["forces"]:
                 table.add_row(
                     [
                         name,
-                        f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
-                        f"{metrics['rmse_f'] * 1000:.1f}",
-                        f"{metrics['rel_rmse_f']:.2f}",
+                        f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                        f"{metrics['rmse_f'] * 1000:8.3f}",
+                        f"{metrics['rel_rmse_f']:8.3f}",
                     ]
                 )
             else:
-                table.add_row([name, f"{metrics['rmse_e_per_atom'] * 1000:.1f}"])
+                table.add_row([name, f"{metrics['rmse_e_per_atom'] * 1000:8.3f}"])
         elif (
             table_type == "PerAtomRMSEstressvirials"
             and metrics["rmse_stress"] is not None
@@ -269,10 +281,10 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
-                    f"{metrics['rmse_f'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_f']:.2f}",
-                    f"{metrics['rmse_stress'] * 1000:.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_stress'] * 1000:8.3f}",
                 ]
             )
         elif (
@@ -282,10 +294,10 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
-                    f"{metrics['rmse_f'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_f']:.2f}",
-                    f"{metrics['rmse_virials'] * 1000:.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_virials'] * 1000:8.3f}",
                 ]
             )
         elif table_type == "TotalMAE":
@@ -293,50 +305,50 @@ def create_error_table(
                 table.add_row(
                     [
                         name,
-                        f"{metrics['mae_e'] * 1000:.1f}",
-                        f"{metrics['mae_f'] * 1000:.1f}",
-                        f"{metrics['rel_mae_f']:.2f}",
+                        f"{metrics['mae_e'] * 1000:8.3f}",
+                        f"{metrics['mae_f'] * 1000:8.3f}",
+                        f"{metrics['rel_mae_f']:8.3f}",
                     ]
                 )
             else:
-                table.add_row([name, f"{metrics['mae_e'] * 1000:.1f}"])
+                table.add_row([name, f"{metrics['mae_e'] * 1000:8.3f}"])
         elif table_type == "PerAtomMAE":
             if output_args["forces"]:
                 table.add_row(
                     [
                         name,
-                        f"{metrics['mae_e_per_atom'] * 1000:.1f}",
-                        f"{metrics['mae_f'] * 1000:.1f}",
-                        f"{metrics['rel_mae_f']:.2f}",
+                        f"{metrics['mae_e_per_atom'] * 1000:8.3f}",
+                        f"{metrics['mae_f'] * 1000:8.3f}",
+                        f"{metrics['rel_mae_f']:8.3f}",
                     ]
                 )
             else:
-                table.add_row([name, f"{metrics['mae_e_per_atom'] * 1000:.1f}"])
+                table.add_row([name, f"{metrics['mae_e_per_atom'] * 1000:8.3f}"])
         elif table_type == "DipoleRMSE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_mu_per_atom'] * 1000:.2f}",
-                    f"{metrics['rel_rmse_mu']:.1f}",
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
                 ]
             )
         elif table_type == "DipoleMAE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_mu_per_atom'] * 1000:.2f}",
-                    f"{metrics['rel_mae_mu']:.1f}",
+                    f"{metrics['mae_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_mu']:8.3f}",
                 ]
             )
         elif table_type == "EnergyDipoleRMSE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:.1f}",
-                    f"{metrics['rmse_f'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_f']:.1f}",
-                    f"{metrics['rmse_mu_per_atom'] * 1000:.1f}",
-                    f"{metrics['rel_rmse_mu']:.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
                 ]
             )
     return table

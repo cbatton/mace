@@ -14,7 +14,7 @@ import yaml
 def boolean_string(s):
     if s not in {"False", "True", "false", "true"}:
         raise ValueError("Not a valid boolean string")
-    return s == "True" or s == "true"
+    return s in {"True", "true"}
 
 
 class LoadFromFile(argparse.Action):
@@ -32,7 +32,7 @@ class LoadFromFile(argparse.Action):
             if f"_{base}.yaml" not in name and base != -1:
                 name = name.replace(".yaml", f"_{base}.yaml")
 
-            with open(name, "r") as f:
+            with open(name, "r") as f:  # pylint: disable=W1514
                 config = yaml.load(f, Loader=yaml.FullLoader)
             if "base" in config:
                 config["base"] = base
@@ -44,7 +44,7 @@ class LoadFromFile(argparse.Action):
                 and namespace.load_model is not None
                 and config["load_model"] != namespace.load_model
             ):
-                rank_zero_warn(
+                print(
                     f"The load model argument was specified as a command line argument "
                     f"({namespace.load_model}) and in the config file ({config['load_model']}). "
                     f"Ignoring 'load_model' from the config file and loading {namespace.load_model}."
@@ -68,7 +68,7 @@ def save_argparse(args, filename, exclude=None):
         ds_arg = args.get("dataset_arg")
         if ds_arg is not None and isinstance(ds_arg, str):
             args["dataset_arg"] = json.loads(args["dataset_arg"])
-        yaml.dump(args, open(filename, "w"))
+        yaml.dump(args, open(filename, "w"))  # pylint: disable=W1514, R1732
     else:
         raise ValueError("Configuration file should end with yaml or yml")
 
@@ -124,6 +124,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=str,
         choices=["float32", "float64"],
         default="float64",
+    )
+    parser.add_argument(
+        "--distributed",
+        help="train in multi-GPU data parallel mode",
+        action="store_true",
+        default=False,
     )
     parser.add_argument("--log_level", help="log level", type=str, default="INFO")
 
@@ -305,6 +311,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=str,
     )
     parser.add_argument(
+        "--num_workers",
+        help="Number of workers for data loading",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--pin_memory",
+        help="Pin memory for data loading",
+        default=True,
+        type=boolean_string,
+    )
+    parser.add_argument(
         "--E0s",
         help="Dictionary of isolated atom energies",
         type=str,
@@ -315,37 +333,37 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--energy_key",
         help="Key of reference energies in training xyz",
         type=str,
-        default="energy",
+        default="REF_energy",
     )
     parser.add_argument(
         "--forces_key",
         help="Key of reference forces in training xyz",
         type=str,
-        default="forces",
+        default="REF_forces",
     )
     parser.add_argument(
         "--virials_key",
         help="Key of reference virials in training xyz",
         type=str,
-        default="virials",
+        default="REF_virials",
     )
     parser.add_argument(
         "--stress_key",
         help="Key of reference stress in training xyz",
         type=str,
-        default="stress",
+        default="REF_stress",
     )
     parser.add_argument(
         "--dipole_key",
         help="Key of reference dipoles in training xyz",
         type=str,
-        default="dipole",
+        default="REF_dipole",
     )
     parser.add_argument(
         "--charges_key",
         help="Key of atomic charges in training xyz",
         type=str,
-        default="charges",
+        default="REF_charges",
     )
 
     # Loss and optimization
@@ -544,6 +562,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="Weights and Biases project name",
         type=str,
         default="",
+    )
+    parser.add_argument(
+        "--wandb_dir",
+        help="An absolute path to a directory where Weights and Biases metadata will be stored",
+        type=str,
+        default="./wandb",
     )
     parser.add_argument(
         "--wandb_entity",

@@ -7,12 +7,16 @@
 import dataclasses
 import logging
 import time
+from contextlib import nullcontext
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.distributed
+from torch.nn.parallel import DistributedDataParallel
 from torch.optim.swa_utils import SWALR, AveragedModel
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torch_ema import ExponentialMovingAverage
 
 from . import torch_geometric
@@ -34,6 +38,119 @@ class SWAContainer:
     scheduler: SWALR
     start: int
     loss_fn: torch.nn.Module
+
+
+def valid_err_log(
+    valid_loss,
+    eval_metrics,
+    logger,
+    log_errors,
+    forces=False,
+    epoch=None,
+):
+    eval_metrics["mode"] = "eval"
+    eval_metrics["epoch"] = epoch
+    logger.log(eval_metrics)
+    if epoch is None:
+        inintial_phrase = "Initial"
+    else:
+        inintial_phrase = f"Epoch {epoch}"
+    if log_errors == "PerAtomRMSE":
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        if forces:
+            error_f = eval_metrics["rmse_f"] * 1e3
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
+            )
+        else:
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV"
+            )
+    elif (
+        log_errors == "PerAtomRMSEstressvirials"
+        and eval_metrics["rmse_stress"] is not None
+    ):
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_stress = eval_metrics["rmse_stress"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_stress={error_stress:8.3f} meV / A^3",
+        )
+    elif (
+        log_errors == "PerAtomRMSEstressvirials"
+        and eval_metrics["rmse_virials_per_atom"] is not None
+    ):
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_virials_per_atom={error_virials:8.3f} meV",
+        )
+    elif (
+        log_errors == "PerAtomMAEstressvirials"
+        and eval_metrics["mae_stress_per_atom"] is not None
+    ):
+        error_e = eval_metrics["mae_e_per_atom"] * 1e3
+        error_f = eval_metrics["mae_f"] * 1e3
+        error_stress = eval_metrics["mae_stress"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_stress={error_stress:8.3f} meV / A^3"
+        )
+    elif (
+        log_errors == "PerAtomMAEstressvirials"
+        and eval_metrics["mae_virials_per_atom"] is not None
+    ):
+        error_e = eval_metrics["mae_e_per_atom"] * 1e3
+        error_f = eval_metrics["mae_f"] * 1e3
+        error_virials = eval_metrics["mae_virials"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_virials={error_virials:8.3f} meV"
+        )
+    elif log_errors == "TotalRMSE":
+        error_e = eval_metrics["rmse_e"] * 1e3
+        if forces:
+            error_f = eval_metrics["rmse_f"] * 1e3
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
+            )
+        else:
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E={error_e:8.3f} meV"
+            )
+    elif log_errors == "PerAtomMAE":
+        error_e = eval_metrics["mae_e_per_atom"] * 1e3
+        if forces:
+            error_f = eval_metrics["mae_f"] * 1e3
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
+            )
+        else:
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV"
+            )
+    elif log_errors == "TotalMAE":
+        error_e = eval_metrics["mae_e"] * 1e3
+        if forces:
+            error_f = eval_metrics["mae_f"] * 1e3
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
+            )
+        else:
+            logging.info(
+                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E={error_e:8.3f} meV"
+            )
+    elif log_errors == "DipoleRMSE":
+        error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
+        )
+    elif log_errors == "EnergyDipoleRMSE":
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+        )
 
 
 def train(
@@ -59,6 +176,10 @@ def train(
     max_grad_norm: Optional[float] = 10.0,
     log_wandb: bool = False,
     wall_clock_time: float = 0,
+    distributed: bool = False,
+    distributed_model: Optional[DistributedDataParallel] = None,
+    train_sampler: Optional[DistributedSampler] = None,
+    rank: Optional[int] = None,
 ):
     # Start timers if wanted
     if wall_clock_time != 0:
@@ -77,7 +198,30 @@ def train(
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
     logging.info("Started training")
+    logging.info("Loss metrics on validation set")
     epoch = start_epoch
+    valid_loss = 0.0
+    valid_loss, eval_metrics = evaluate(
+        model=model,
+        loss_fn=loss_fn,
+        data_loader=valid_loader,
+        output_args=output_args,
+        device=device,
+    )
+    if start_epoch == 0:
+        valid_err_log(
+            valid_loss, eval_metrics, logger, log_errors, output_args["forces"], None
+        )
+    else:
+        valid_err_log(
+            valid_loss,
+            eval_metrics,
+            logger,
+            log_errors,
+            output_args["forces"],
+            start_epoch,
+        )
+
     while epoch < max_num_epochs:
         # Check time
         if wall_clock_time != 0:
@@ -122,175 +266,226 @@ def train(
                 swa.scheduler.step()
 
         # Train
-        for batch in train_loader:
-            _, opt_metrics = take_step(
-                model=model,
-                loss_fn=loss_fn,
-                batch=batch,
-                optimizer=optimizer,
-                ema=ema,
-                output_args=output_args,
-                max_grad_norm=max_grad_norm,
-                device=device,
-            )
-            opt_metrics["mode"] = "opt"
-            opt_metrics["epoch"] = epoch
-            logger.log(opt_metrics)
+        if distributed:
+            train_sampler.set_epoch(epoch)
+        train_one_epoch(
+            model=model,
+            loss_fn=loss_fn,
+            data_loader=train_loader,
+            optimizer=optimizer,
+            epoch=epoch,
+            output_args=output_args,
+            max_grad_norm=max_grad_norm,
+            ema=ema,
+            logger=logger,
+            device=device,
+            distributed_model=distributed_model,
+            rank=rank,
+            distributed=distributed,
+        )
+        if distributed:
+            torch.distributed.barrier()
 
         # Validate
         if epoch % eval_interval == 0:
-            if ema is not None:
-                with ema.average_parameters():
-                    valid_loss, eval_metrics = evaluate(
-                        model=model,
-                        loss_fn=loss_fn,
-                        data_loader=valid_loader,
-                        output_args=output_args,
-                        device=device,
-                    )
-            else:
+            model_to_evaluate = (
+                model if distributed_model is None else distributed_model
+            )
+            param_context = (
+                ema.average_parameters() if ema is not None else nullcontext()
+            )
+            with param_context:
+                valid_loss = 0.0
+                wandb_log_dict = {}
                 valid_loss, eval_metrics = evaluate(
-                    model=model,
+                    model=model_to_evaluate,
                     loss_fn=loss_fn,
                     data_loader=valid_loader,
                     output_args=output_args,
                     device=device,
                 )
-            eval_metrics["mode"] = "eval"
-            eval_metrics["epoch"] = epoch
-            logger.log(eval_metrics)
-            if log_errors == "PerAtomRMSE":
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                if output_args["forces"]:
-                    error_f = eval_metrics["rmse_f"] * 1e3
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
+                if distributed and rank == 0:
+                    valid_err_log(
+                        valid_loss,
+                        eval_metrics,
+                        logger,
+                        log_errors,
+                        output_args["forces"],
+                        epoch,
                     )
-                else:
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV"
+                    if log_wandb:
+                        if output_args["forces"]:
+                            wandb_log_dict = {
+                                "epoch": epoch,
+                                "valid_loss": valid_loss,
+                                "valid_rmse_e_per_atom": eval_metrics[
+                                    "rmse_e_per_atom"
+                                ],
+                                "valid_rmse_f": eval_metrics["rmse_f"],
+                            }
+                            wandb.log(wandb_log_dict)
+                        else:
+                            wandb_log_dict = {
+                                "epoch": epoch,
+                                "valid_loss": valid_loss,
+                                "valid_rmse_e_per_atom": eval_metrics[
+                                    "rmse_e_per_atom"
+                                ],
+                            }
+                            wandb.log(wandb_log_dict)
+                elif not distributed:
+                    valid_err_log(
+                        valid_loss,
+                        eval_metrics,
+                        logger,
+                        log_errors,
+                        output_args["forces"],
+                        epoch,
                     )
-            elif (
-                log_errors == "PerAtomRMSEstressvirials"
-                and eval_metrics["rmse_stress_per_atom"] is not None
-            ):
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_stress = eval_metrics["rmse_stress_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_stress_per_atom={error_stress:.1f} meV / A^3"
-                )
-            elif (
-                log_errors == "PerAtomRMSEstressvirials"
-                and eval_metrics["rmse_virials_per_atom"] is not None
-            ):
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_virials_per_atom={error_virials:.1f} meV"
-                )
-            elif log_errors == "TotalRMSE":
-                error_e = eval_metrics["rmse_e"] * 1e3
-                if output_args["forces"]:
-                    error_f = eval_metrics["rmse_f"] * 1e3
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
-                    )
-                else:
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E={error_e:.1f} meV"
-                    )
-            elif log_errors == "PerAtomMAE":
-                error_e = eval_metrics["mae_e_per_atom"] * 1e3
-                if output_args["forces"]:
-                    error_f = eval_metrics["mae_f"] * 1e3
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E_per_atom={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
-                    )
-                else:
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E_per_atom={error_e:.1f} meV"
-                    )
-            elif log_errors == "TotalMAE":
-                error_e = eval_metrics["mae_e"] * 1e3
-                if output_args["forces"]:
-                    error_f = eval_metrics["mae_f"] * 1e3
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
-                    )
-                else:
-                    logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E={error_e:.1f} meV"
-                    )
-            elif log_errors == "DipoleRMSE":
-                error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_MU_per_atom={error_mu:.2f} mDebye"
-                )
-            elif log_errors == "EnergyDipoleRMSE":
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_Mu_per_atom={error_mu:.2f} mDebye"
-                )
-            if log_wandb:
-                wandb_log_dict = {
-                    "epoch": epoch,
-                    "valid_loss": valid_loss,
-                    "valid_rmse_e_per_atom": eval_metrics["rmse_e_per_atom"],
-                    "valid_rmse_f": eval_metrics["rmse_f"],
-                }
-                wandb.log(wandb_log_dict)
-            if valid_loss >= lowest_loss:
-                patience_counter += 1
-                if swa is not None:
-                    if patience_counter >= patience and epoch < swa.start:
+                    if log_wandb:
+                        if output_args["forces"]:
+                            wandb_log_dict = {
+                                "epoch": epoch,
+                                "valid_loss": valid_loss,
+                                "valid_rmse_e_per_atom": eval_metrics[
+                                    "rmse_e_per_atom"
+                                ],
+                                "valid_rmse_f": eval_metrics["rmse_f"],
+                            }
+                            wandb.log(wandb_log_dict)
+                        else:
+                            wandb_log_dict = {
+                                "epoch": epoch,
+                                "valid_loss": valid_loss,
+                                "valid_rmse_e_per_atom": eval_metrics[
+                                    "rmse_e_per_atom"
+                                ],
+                            }
+                            wandb.log(wandb_log_dict)
+
+            if distributed and rank == 0:
+                if valid_loss >= lowest_loss:
+                    patience_counter += 1
+                    if swa is not None:
+                        if patience_counter >= patience and epoch < swa.start:
+                            logging.info(
+                                f"Stopping optimization after {patience_counter} epochs without improvement and starting swa"
+                            )
+                            epoch = swa.start
+                    elif patience_counter >= patience:
                         logging.info(
-                            f"Stopping optimization after {patience_counter} epochs without improvement and starting swa"
+                            f"Stopping optimization after {patience_counter} epochs without improvement"
                         )
-                        epoch = swa.start
-                elif patience_counter >= patience:
-                    logging.info(
-                        f"Stopping optimization after {patience_counter} epochs without improvement"
-                    )
-                    break
-            else:
-                lowest_loss = valid_loss
-                patience_counter = 0
-                if ema is not None:
-                    with ema.average_parameters():
+                        break
+                else:
+                    lowest_loss = valid_loss
+                    patience_counter = 0
+                    if ema is not None:
+                        with ema.average_parameters():
+                            checkpoint_handler.save(
+                                state=CheckpointState(model, optimizer, lr_scheduler),
+                                epochs=epoch,
+                                keep_last=keep_last,
+                            )
+                            keep_last = False
+                    else:
                         checkpoint_handler.save(
                             state=CheckpointState(model, optimizer, lr_scheduler),
                             epochs=epoch,
                             keep_last=keep_last,
                         )
                         keep_last = False
-                else:
-                    checkpoint_handler.save(
-                        state=CheckpointState(model, optimizer, lr_scheduler),
-                        epochs=epoch,
-                        keep_last=keep_last,
-                    )
-                    keep_last = False
-            if epoch % save_interval == 0:
-                if ema is not None:
-                    with ema.average_parameters():
+                if epoch % save_interval == 0:
+                    if ema is not None:
+                        with ema.average_parameters():
+                            checkpoint_handler_2.save(
+                                state=CheckpointState(model, optimizer, lr_scheduler),
+                                epochs=epoch,
+                                keep_last=True,
+                            )
+                    else:
                         checkpoint_handler_2.save(
                             state=CheckpointState(model, optimizer, lr_scheduler),
                             epochs=epoch,
                             keep_last=True,
                         )
+            else:
+                if valid_loss >= lowest_loss:
+                    patience_counter += 1
+                    if swa is not None:
+                        if patience_counter >= patience and epoch < swa.start:
+                            logging.info(
+                                f"Stopping optimization after {patience_counter} epochs without improvement and starting swa"
+                            )
+                            epoch = swa.start
+                    elif patience_counter >= patience:
+                        logging.info(
+                            f"Stopping optimization after {patience_counter} epochs without improvement"
+                        )
+                        break
                 else:
-                    checkpoint_handler_2.save(
-                        state=CheckpointState(model, optimizer, lr_scheduler),
-                        epochs=epoch,
-                        keep_last=True,
+                    lowest_loss = valid_loss
+                    patience_counter = 0
+                    param_context = (
+                        ema.average_parameters() if ema is not None else nullcontext()
                     )
+                    with param_context:
+                        checkpoint_handler.save(
+                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            epochs=epoch,
+                            keep_last=keep_last,
+                        )
+                        keep_last = False
+                if epoch % save_interval == 0:
+                    param_context = (
+                        ema.average_parameters() if ema is not None else nullcontext()
+                    )
+                    with param_context:
+                        checkpoint_handler_2.save(
+                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            epochs=epoch,
+                            keep_last=True,
+                        )
+        if distributed:
+            torch.distributed.barrier()
         epoch += 1
 
     logging.info("Training complete")
+
+
+def train_one_epoch(
+    model: torch.nn.Module,
+    loss_fn: torch.nn.Module,
+    data_loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    output_args: Dict[str, bool],
+    max_grad_norm: Optional[float],
+    ema: Optional[ExponentialMovingAverage],
+    logger: MetricsLogger,
+    device: torch.device,
+    distributed_model: Optional[DistributedDataParallel] = None,
+    rank: Optional[int] = 0,
+    distributed: bool = False,
+) -> None:
+    model_to_train = model if distributed_model is None else distributed_model
+    for batch in data_loader:
+        _, opt_metrics = take_step(
+            model=model_to_train,
+            loss_fn=loss_fn,
+            batch=batch,
+            optimizer=optimizer,
+            ema=ema,
+            output_args=output_args,
+            max_grad_norm=max_grad_norm,
+            device=device,
+        )
+        opt_metrics["mode"] = "opt"
+        opt_metrics["epoch"] = epoch
+        if distributed and rank == 0:
+            logger.log(opt_metrics)
+        else:
+            logger.log(opt_metrics)
 
 
 def take_step(
@@ -356,6 +551,9 @@ def evaluate(
     delta_mus_per_atom_list = []
     mus_list = []
     batch = None  # for pylint
+
+    for param in model.parameters():
+        param.requires_grad = False
 
     start_time = time.time()
     for batch in data_loader:
@@ -459,5 +657,8 @@ def evaluate(
         aux["q95_mu"] = compute_q95(delta_mus)
 
     aux["time"] = time.time() - start_time
+
+    for param in model.parameters():
+        param.requires_grad = True
 
     return avg_loss, aux

@@ -54,7 +54,7 @@ Configurations = List[Configuration]
 
 
 def random_train_valid_split(
-    items: Sequence, valid_fraction: float, seed: int, work_dir: str
+    items: Sequence, valid_fraction: float, seed: int, log_dir: str
 ) -> Tuple[List, List]:
     assert 0.0 < valid_fraction < 1.0
 
@@ -67,12 +67,12 @@ def random_train_valid_split(
 
     # Save the indices for reproducibility
     # make sure the directory exists
-    Path(work_dir).mkdir(parents=True, exist_ok=True)
-    work_dir = Path(work_dir)
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    log_dir = Path(log_dir)
     indices_train = indices[:train_size]
     indices_valid = indices[train_size:]
-    np.save(work_dir / "train_indices.npy", indices_train)
-    np.save(work_dir / "valid_indices.npy", indices_valid)
+    np.save(log_dir / "train_indices.npy", indices_train)
+    np.save(log_dir / "valid_indices.npy", indices_valid)
 
     return (
         [items[i] for i in indices_train],
