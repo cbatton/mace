@@ -605,6 +605,7 @@ def main() -> None:
         distributed_model=distributed_model,
         train_sampler=train_sampler,
         rank=rank,
+        world_size=world_size,
         wall_clock_time=args.wall_clock_time,
     )
 
