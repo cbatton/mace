@@ -7,6 +7,7 @@
 import ast
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -43,13 +44,11 @@ def main() -> None:
     rank = 0
     local_rank = 0
     world_size = 1
+    comm = []
     if args.mpi:
         try:
             logging.info(f"Running on {MPI.COMM_WORLD.Get_size()} MPI processes")
             comm = MPI.COMM_WORLD
-            rank = comm.Get_rank()
-            args.seed += rank
-            rank = 0
         except NameError:
             logging.info("mpi4py not found, running in serial mode")
     elif args.distributed:
@@ -67,8 +66,15 @@ def main() -> None:
     tag = tools.get_tag(name=args.name, seed=args.seed)
     tag_2 = f"{tag}_2"
     # also add tag to directory names in args
-    for key in ["log_dir", "results_dir", "checkpoints_dir", "model_dir", "wandb_name"]:
-        args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.base)
+    if args.mpi:
+        for key in [
+            "log_dir",
+            "results_dir",
+            "checkpoints_dir",
+            "model_dir",
+            "wandb_name",
+        ]:
+            args.__dict__[key] = tools.get_tag(name=args.__dict__[key], seed=args.base)
 
     # Setup
     tools.set_seeds(args.seed)
@@ -83,6 +89,15 @@ def main() -> None:
         torch.cuda.set_device(local_rank)
         logging.info(f"Process group initialized: {torch.distributed.is_initialized()}")
         logging.info(f"Processes: {world_size}")
+    # redirect stdout and stderr to log file
+    sys.stdout = open(args.log_dir + "/stdout.log", "a")  # pylint: disable=W1514,R1732
+    sys.stderr = open(args.log_dir + "/stderr.log", "a")  # pylint: disable=W1514,R1732
+    if args.input_val:
+        tools.save_argparse(
+            args, f"{args.log_dir}/input_{args.base}.yaml", exclude="conf"
+        )
+    else:
+        tools.save_argparse(args, f"{args.log_dir}/input.yaml", exclude="conf")
     try:
         logging.info(f"MACE version: {mace.__version__}")
     except AttributeError:
@@ -680,7 +695,13 @@ def main() -> None:
             torch.distributed.barrier()
 
     logging.info("Done")
-    if args.distributed:
+    # set barrier to ensure all processes finish
+    if args.mpi:
+        try:
+            comm.Barrier()
+        except NameError:
+            pass
+    elif args.distributed:
         torch.distributed.destroy_process_group()
 
 
