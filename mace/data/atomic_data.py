@@ -4,8 +4,10 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
+import h5py
+import torch
 import torch.utils.data
 
 from mace.tools import (
@@ -17,7 +19,7 @@ from mace.tools import (
 )
 
 from .neighborhood import get_neighborhood
-from .utils import Configuration
+from .utils import Configuration, Configurations
 
 
 class AtomicData(torch_geometric.data.Data):
@@ -225,3 +227,219 @@ def get_data_loader(
         shuffle=shuffle,
         drop_last=drop_last,
     )
+
+
+def save_dataset_as_HDF5(
+    dataset: List, out_name: str, compression: str = "gzip", compression_level: int = 4
+) -> None:
+    with h5py.File(out_name, "w") as f:
+        for i, data in enumerate(dataset):
+            grp = f.create_group(f"config_{i}")
+            grp.create_dataset("num_nodes", data=data.num_nodes, dtype="i8")
+            grp.create_dataset(
+                "edge_index",
+                data=data.edge_index,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="i8",
+            )
+            grp.create_dataset(
+                "positions",
+                data=data.positions,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "shifts",
+                data=data.shifts,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "unit_shifts",
+                data=data.unit_shifts,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "cell",
+                data=data.cell,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "node_attrs",
+                data=data.node_attrs,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset("weight", data=data.weight, dtype="f8")
+            grp.create_dataset("energy_weight", data=data.energy_weight, dtype="f8")
+            grp.create_dataset("forces_weight", data=data.forces_weight, dtype="f8")
+            grp.create_dataset("stress_weight", data=data.stress_weight, dtype="f8")
+            grp.create_dataset("virials_weight", data=data.virials_weight, dtype="f8")
+            grp.create_dataset(
+                "forces",
+                data=data.forces,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset("energy", data=data.energy, dtype="f8")
+            grp.create_dataset(
+                "stress",
+                data=data.stress,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "virials",
+                data=data.virials,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            grp.create_dataset(
+                "charges",
+                data=data.charges,
+                compression=compression,
+                compression_opts=compression_level,
+                dtype="f8",
+            )
+            try:
+                grp.create_dataset(
+                    "dipole",
+                    data=data.dipole,
+                    compression=compression,
+                    compression_opts=compression_level,
+                    dtype="f8",
+                )
+            except TypeError:
+                pass
+
+
+def load_dataset_from_HDF5(file_path: str) -> List[AtomicData]:
+    dataset = []
+    with h5py.File(file_path, "r") as f:
+        # Iterate through the groups in the HDF5 file
+        for config_key in f.keys():  # pylint: disable=C0206
+            grp = f[config_key]
+
+            # Check for the existence of the "dipole" key in the group
+            dipole = (
+                torch.tensor(grp["dipole"][()], dtype=torch.get_default_dtype())
+                if "dipole" in grp
+                else None
+            )
+
+            atomic_data = AtomicData(
+                edge_index=torch.tensor(
+                    grp["edge_index"][()], dtype=torch.long
+                ),  # [2, n_edges]
+                node_attrs=torch.tensor(
+                    grp["node_attrs"][()], dtype=torch.long
+                ),  # [n_nodes, n_node_feats]
+                positions=torch.tensor(
+                    grp["positions"][()], dtype=torch.get_default_dtype()
+                ),  # [n_nodes, 3]
+                shifts=torch.tensor(
+                    grp["shifts"][()], dtype=torch.get_default_dtype()
+                ),  # [n_edges, 3]
+                unit_shifts=torch.tensor(
+                    grp["unit_shifts"][()], dtype=torch.get_default_dtype()
+                ),  # [n_edges, 3]
+                cell=torch.tensor(
+                    grp["cell"][()], dtype=torch.get_default_dtype()
+                ),  # [3, 3]
+                weight=torch.tensor(
+                    grp["weight"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                energy_weight=torch.tensor(
+                    grp["energy_weight"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                forces_weight=torch.tensor(
+                    grp["forces_weight"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                stress_weight=torch.tensor(
+                    grp["stress_weight"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                virials_weight=torch.tensor(
+                    grp["virials_weight"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                forces=torch.tensor(
+                    grp["forces"][()], dtype=torch.get_default_dtype()
+                ),  # [n_nodes, 3]
+                energy=torch.tensor(
+                    grp["energy"][()], dtype=torch.get_default_dtype()
+                ),  # [,]
+                stress=torch.tensor(
+                    grp["stress"][()], dtype=torch.get_default_dtype()
+                ),  # [1, 3, 3]
+                virials=torch.tensor(
+                    grp["virials"][()], dtype=torch.get_default_dtype()
+                ),  # [1, 3, 3]
+                dipole=dipole,  # [3,] or None if not present
+                charges=torch.tensor(
+                    grp["charges"][()], dtype=torch.get_default_dtype()
+                ),  # [n_nodes,]
+            )
+
+            # Append to the list of dataset
+            dataset.append(atomic_data)
+
+    return dataset
+
+
+def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
+    grp = h5_file.create_group(f"config_{i}")
+    grp["num_nodes"] = data.num_nodes
+    grp["edge_index"] = data.edge_index
+    grp["positions"] = data.positions
+    grp["shifts"] = data.shifts
+    grp["unit_shifts"] = data.unit_shifts
+    grp["cell"] = data.cell
+    grp["node_attrs"] = data.node_attrs
+    grp["weight"] = data.weight
+    grp["energy_weight"] = data.energy_weight
+    grp["forces_weight"] = data.forces_weight
+    grp["stress_weight"] = data.stress_weight
+    grp["virials_weight"] = data.virials_weight
+    grp["forces"] = data.forces
+    grp["energy"] = data.energy
+    grp["stress"] = data.stress
+    grp["virials"] = data.virials
+    grp["dipole"] = data.dipole
+    grp["charges"] = data.charges
+
+
+def save_configurations_as_HDF5(configurations: Configurations, _, h5_file) -> None:
+    grp = h5_file.create_group("config_batch_0")
+    for j, config in enumerate(configurations):
+        subgroup_name = f"config_{j}"
+        subgroup = grp.create_group(subgroup_name)
+        subgroup["atomic_numbers"] = write_value(config.atomic_numbers)
+        subgroup["positions"] = write_value(config.positions)
+        subgroup["energy"] = write_value(config.energy)
+        subgroup["forces"] = write_value(config.forces)
+        subgroup["stress"] = write_value(config.stress)
+        subgroup["virials"] = write_value(config.virials)
+        subgroup["dipole"] = write_value(config.dipole)
+        subgroup["charges"] = write_value(config.charges)
+        subgroup["cell"] = write_value(config.cell)
+        subgroup["pbc"] = write_value(config.pbc)
+        subgroup["weight"] = write_value(config.weight)
+        subgroup["energy_weight"] = write_value(config.energy_weight)
+        subgroup["forces_weight"] = write_value(config.forces_weight)
+        subgroup["stress_weight"] = write_value(config.stress_weight)
+        subgroup["virials_weight"] = write_value(config.virials_weight)
+        subgroup["config_type"] = write_value(config.config_type)
+
+
+def write_value(value):
+    return value if value is not None else "None"
