@@ -88,12 +88,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", help="experiment name")
     parser.add_argument("--seed", help="random seed", type=int, default=0)
     parser.add_argument("--base", help="base number", type=int, default=0)
-    parser.add_argument("--mpi", help="enable mpi", type=boolean_string, default=True)
+    parser.add_argument("--mpi", help="enable mpi", type=boolean_string, default=False)
     parser.add_argument(
         "--input_val",
         help="expand input name with base",
         type=boolean_string,
-        default=True,
+        default=False,
     )
 
     # Directories
