@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import re
 from typing import List, Optional, Sequence
 
 import h5py
@@ -20,6 +21,16 @@ from mace.tools import (
 
 from .neighborhood import get_neighborhood
 from .utils import Configuration, Configurations
+
+
+def natural_sort(l):
+    convert = lambda text: (  # pylint: disable=C3001
+        int(text) if text.isdigit() else text.lower()
+    )
+    alphanum_key = lambda key: [  # pylint: disable=C3001
+        convert(c) for c in re.split("([0-9]+)", key)
+    ]
+    return sorted(l, key=alphanum_key)
 
 
 class AtomicData(torch_geometric.data.Data):
@@ -328,7 +339,8 @@ def load_dataset_from_HDF5(file_path: str) -> List[AtomicData]:
     dataset = []
     with h5py.File(file_path, "r") as f:
         # Iterate through the groups in the HDF5 file
-        for config_key in f.keys():  # pylint: disable=C0206
+        # First do a natural sort to ensure that the configurations are loaded in the correct order
+        for config_key in natural_sort(list(f.keys())):  # pylint: disable=C0206
             grp = f[config_key]
 
             # Check for the existence of the "dipole" key in the group
