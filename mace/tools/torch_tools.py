@@ -5,6 +5,7 @@
 ###########################################################################################
 
 import logging
+import os
 from typing import Dict
 
 import numpy as np
@@ -143,7 +144,7 @@ def init_wandb(
         entity=entity,
         name=name,
         config=config,
-        dir=directory,
+        dir=os.path.join(os.getcwd(), directory),
         id=name,
         resume="allow",
     )

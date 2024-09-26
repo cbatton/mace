@@ -571,9 +571,9 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--wandb_dir",
-        help="An absolute path to a directory where Weights and Biases metadata will be stored",
+        help="A relative path to a directory where Weights and Biases metadata will be stored",
         type=str,
-        default="./wandb",
+        default="wandb",
     )
     parser.add_argument(
         "--wandb_entity",
