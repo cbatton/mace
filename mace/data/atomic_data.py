@@ -343,7 +343,7 @@ def load_dataset_from_HDF5(file_path: str) -> List[AtomicData]:
                     grp["edge_index"][()], dtype=torch.long
                 ),  # [2, n_edges]
                 node_attrs=torch.tensor(
-                    grp["node_attrs"][()], dtype=torch.long
+                    grp["node_attrs"][()], dtype=torch.get_default_dtype()
                 ),  # [n_nodes, n_node_feats]
                 positions=torch.tensor(
                     grp["positions"][()], dtype=torch.get_default_dtype()
