@@ -1,6 +1,7 @@
 from .atomic_data import (
     AtomicData,
     load_dataset_from_HDF5,
+    merge_HDF5_files,
     save_AtomicData_to_HDF5,
     save_configurations_as_HDF5,
     save_dataset_as_HDF5,
@@ -31,6 +32,7 @@ __all__ = [
     "compute_average_E0s",
     "save_dataset_as_HDF5",
     "load_dataset_from_HDF5",
+    "merge_HDF5_files",
     "HDF5Dataset",
     "dataset_from_sharded_hdf5",
     "save_AtomicData_to_HDF5",

@@ -408,6 +408,19 @@ def load_dataset_from_HDF5(file_path: str) -> List[AtomicData]:
     return dataset
 
 
+def merge_HDF5_files(
+    file_paths: List[str],
+    out_name: str,
+    compression: str = "gzip",
+    compression_level: int = 4,
+) -> None:
+    # Load in the datasets from the HDF5 files, and merge them into a single dataset
+    datasets = []
+    for file_path in file_paths:
+        datasets.extend(load_dataset_from_HDF5(file_path))
+    save_dataset_as_HDF5(datasets, out_name, compression, compression_level)
+
+
 def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
     grp = h5_file.create_group(f"config_{i}")
     grp["num_nodes"] = data.num_nodes
