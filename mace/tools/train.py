@@ -393,6 +393,9 @@ def train(
 
         if distributed:
             torch.distributed.barrier()
+            # Communicate epoch to all processes
+            torch.distributed.broadcast(torch.tensor([epoch]), src=0)
+            epoch = epoch.item()
         epoch += 1
 
     logging.info("Training complete")
