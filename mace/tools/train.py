@@ -394,8 +394,9 @@ def train(
         if distributed:
             torch.distributed.barrier()
             # Communicate epoch to all processes
-            torch.distributed.broadcast(torch.tensor([epoch]), src=0)
-            epoch = epoch.item()
+            torch.distributed.broadcast(
+                torch.tensor([epoch], device=device, dtype=torch.int), src=0
+            )
         epoch += 1
 
     logging.info("Training complete")
@@ -548,7 +549,7 @@ class MACELoss(Metric):
     def update(self, batch, output):  # pylint: disable=arguments-differ
         loss = self.loss_fn(pred=output, ref=batch)
         self.total_loss += loss
-        self.num_data += batch.num_graphs
+        self.num_data += 1
 
         if output.get("energy") is not None and batch.energy is not None:
             self.E_computed += 1.0
