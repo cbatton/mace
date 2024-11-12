@@ -2,28 +2,18 @@ from glob import glob
 from typing import List
 
 import h5py
+import torch
 from torch.utils.data import ConcatDataset, Dataset
 
 from mace.data.atomic_data import AtomicData
-from mace.data.utils import Configuration
 from mace.tools.utils import AtomicNumberTable
 
 
 class HDF5Dataset(Dataset):
-    def __init__(self, file_path, r_max, z_table, **kwargs):
+    def __init__(self, file_path):
         super(HDF5Dataset, self).__init__()  # pylint: disable=super-with-arguments
         self.file_path = file_path
         self._file = None
-        batch_key = list(self.file.keys())[0]
-        self.batch_size = len(self.file[batch_key].keys())
-        self.length = len(self.file.keys()) * self.batch_size
-        self.r_max = r_max
-        self.z_table = z_table
-        try:
-            self.drop_last = bool(self.file.attrs["drop_last"])
-        except KeyError:
-            self.drop_last = False
-        self.kwargs = kwargs
 
     @property
     def file(self):
@@ -40,51 +30,68 @@ class HDF5Dataset(Dataset):
         return _d
 
     def __len__(self):
-        return self.length
+        return len(self.file)
 
     def __getitem__(self, index):
         # compute the index of the batch
-        batch_index = index // self.batch_size
-        config_index = index % self.batch_size
-        grp = self.file["config_batch_" + str(batch_index)]
-        subgrp = grp["config_" + str(config_index)]
-        config = Configuration(
-            atomic_numbers=subgrp["atomic_numbers"][()],
-            positions=subgrp["positions"][()],
-            energy=unpack_value(subgrp["energy"][()]),
-            forces=unpack_value(subgrp["forces"][()]),
-            stress=unpack_value(subgrp["stress"][()]),
-            virials=unpack_value(subgrp["virials"][()]),
-            dipole=unpack_value(subgrp["dipole"][()]),
-            charges=unpack_value(subgrp["charges"][()]),
-            weight=unpack_value(subgrp["weight"][()]),
-            energy_weight=unpack_value(subgrp["energy_weight"][()]),
-            forces_weight=unpack_value(subgrp["forces_weight"][()]),
-            stress_weight=unpack_value(subgrp["stress_weight"][()]),
-            virials_weight=unpack_value(subgrp["virials_weight"][()]),
-            config_type=unpack_value(subgrp["config_type"][()]),
-            pbc=unpack_value(subgrp["pbc"][()]),
-            cell=unpack_value(subgrp["cell"][()]),
+        grp = self.file["config_" + str(index)]
+
+        # check for the existense of the "dipole" key in the group
+        dipole = (
+            torch.tensor(grp["dipole"][()], dtype=torch.get_default_dtype())
+            if "dipole" in grp
+            else None
         )
-        atomic_data = AtomicData.from_config(
-            config,
-            z_table=self.z_table,
-            cutoff=self.r_max,
+        atomic_data = AtomicData(
+            edge_index=torch.tensor(
+                grp["edge_index"][()], dtype=torch.long
+            ),  # [2, n_edges]
+            node_attrs=torch.tensor(
+                grp["node_attrs"][()], dtype=torch.get_default_dtype()
+            ),  # [n_nodes, n_node_feats]
+            positions=torch.tensor(
+                grp["positions"][()], dtype=torch.get_default_dtype()
+            ),  # [n_nodes, 3]
+            shifts=torch.tensor(
+                grp["shifts"][()], dtype=torch.get_default_dtype()
+            ),  # [n_edges, 3]
+            unit_shifts=torch.tensor(
+                grp["unit_shifts"][()], dtype=torch.get_default_dtype()
+            ),  # [n_edges, 3]
+            cell=torch.tensor(
+                grp["cell"][()], dtype=torch.get_default_dtype()
+            ),  # [3, 3]
+            weight=torch.tensor(
+                grp["weight"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            energy_weight=torch.tensor(
+                grp["energy_weight"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            forces_weight=torch.tensor(
+                grp["forces_weight"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            stress_weight=torch.tensor(
+                grp["stress_weight"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            virials_weight=torch.tensor(
+                grp["virials_weight"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            forces=torch.tensor(
+                grp["forces"][()], dtype=torch.get_default_dtype()
+            ),  # [n_nodes, 3]
+            energy=torch.tensor(
+                grp["energy"][()], dtype=torch.get_default_dtype()
+            ),  # [,]
+            stress=torch.tensor(
+                grp["stress"][()], dtype=torch.get_default_dtype()
+            ),  # [1, 3, 3]
+            virials=torch.tensor(
+                grp["virials"][()], dtype=torch.get_default_dtype()
+            ),  # [1, 3, 3]
+            dipole=dipole,  # [3,] or None if not present
+            charges=torch.tensor(
+                grp["charges"][()], dtype=torch.get_default_dtype()
+            ),  # [n_nodes,]
         )
+
         return atomic_data
-
-
-def dataset_from_sharded_hdf5(
-    files: List, z_table: AtomicNumberTable, r_max: float, **kwargs
-):
-    files = glob(files + "/*")
-    datasets = []
-    for file in files:
-        datasets.append(HDF5Dataset(file, z_table=z_table, r_max=r_max, **kwargs))
-    full_dataset = ConcatDataset(datasets)
-    return full_dataset
-
-
-def unpack_value(value):
-    value = value.decode("utf-8") if isinstance(value, bytes) else value
-    return None if str(value) == "None" else value
