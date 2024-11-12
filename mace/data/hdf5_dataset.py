@@ -10,9 +10,10 @@ from mace.tools.utils import AtomicNumberTable
 
 
 class HDF5Dataset(Dataset):
-    def __init__(self, file_path):
+    def __init__(self, file_path, indices):
         super(HDF5Dataset, self).__init__()  # pylint: disable=super-with-arguments
         self.file_path = file_path
+        self.indices = indices
         self._file = None
 
     @property
@@ -30,10 +31,11 @@ class HDF5Dataset(Dataset):
         return _d
 
     def __len__(self):
-        return len(self.file)
+        return len(self.indices)
 
     def __getitem__(self, index):
         # compute the index of the batch
+        index = self.indices[index]
         grp = self.file["config_" + str(index)]
 
         # check for the existense of the "dipole" key in the group
