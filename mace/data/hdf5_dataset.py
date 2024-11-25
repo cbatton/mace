@@ -1,12 +1,8 @@
-from glob import glob
-from typing import List
-
 import h5py
 import torch
-from torch.utils.data import ConcatDataset, Dataset
+from torch.utils.data import Dataset
 
 from mace.data.atomic_data import AtomicData
-from mace.tools.utils import AtomicNumberTable
 
 
 class HDF5Dataset(Dataset):

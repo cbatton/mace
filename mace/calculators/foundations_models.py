@@ -110,7 +110,7 @@ def mace_mp(
         try:
             from torch_dftd.torch_dftd3_calculator import TorchDFTD3Calculator
         except ImportError:
-            raise RuntimeError(
+            raise RuntimeError(  # pylint: disable=W0707
                 f"Please install torch-dftd to use dispersion corrections (see {gh_url})"
             )
         print(
@@ -125,7 +125,11 @@ def mace_mp(
             cutoff=dispersion_cutoff,
             **kwargs,
         )
-    calc = mace_calc if not dispersion else SumCalculator([mace_calc, d3_calc])
+    calc = (
+        mace_calc
+        if not dispersion
+        else SumCalculator([mace_calc, d3_calc])  # pylint: disable=E0606
+    )
     return calc
 
 

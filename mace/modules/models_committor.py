@@ -4,9 +4,8 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
-import numpy as np
 import torch
 from e3nn import o3
 from e3nn.util.jit import compile_mode
@@ -22,11 +21,10 @@ from .blocks import (
     RadialEmbeddingBlock,
 )
 from .models import MACE
-from .utils import (
-    get_edge_vectors_and_lengths,
-)
+from .utils import get_edge_vectors_and_lengths
 
 # pylint: disable=C0302
+
 
 @compile_mode("script")
 class ParametricSigmoid(torch.nn.Module):
@@ -36,6 +34,7 @@ class ParametricSigmoid(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return 1.0 / (1.0 + torch.exp(-self.p * x))
+
 
 @compile_mode("script")
 class CommittorMACE(torch.nn.Module):
@@ -159,9 +158,10 @@ class CommittorMACE(torch.nn.Module):
         # pass through a modified sigmoid
         self.psigmoid = ParametricSigmoid(p=p)
 
-    def ReadMACEModel(self,
-                 model: MACE,
-     ) -> None:
+    def ReadMACEModel(
+        self,
+        model: MACE,
+    ) -> None:
         # Load in the relevant parameters of a model
         # trained on energies and forces
         self.node_embedding.load_state_dict(model.node_embedding.state_dict())
