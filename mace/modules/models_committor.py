@@ -158,7 +158,7 @@ class CommittorMACE(torch.nn.Module):
         # pass through a modified sigmoid
         self.psigmoid = ParametricSigmoid(p=p)
 
-    def ReadMACEModel(
+    def read_MACE_model(
         self,
         model: MACE,
     ) -> None:
@@ -228,6 +228,7 @@ class CommittorMACE(torch.nn.Module):
 
         return {
             "committor": committors,
+            "total_contributions": total_contributions,
             "node_contrib": node_contrib,
             "contributions": contributions,
             "node_feats": node_feats_out,

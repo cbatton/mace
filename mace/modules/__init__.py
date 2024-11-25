@@ -38,6 +38,7 @@ from .models import (
     ScaleShiftBOTNet,
     ScaleShiftMACE,
 )
+from .models_committor import CommittorMACE
 from .radial import BesselBasis, GaussianBasis, PolynomialCutoff
 from .symmetric_contraction import SymmetricContraction
 from .utils import (
