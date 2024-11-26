@@ -6,7 +6,7 @@ from .atomic_data import (
     save_configurations_as_HDF5,
     save_dataset_as_HDF5,
 )
-from .hdf5_dataset import HDF5Dataset
+from .hdf5_dataset import HDF5Dataset, HDF5DatasetCommittor
 from .neighborhood import get_neighborhood
 from .utils import (
     Configuration,
