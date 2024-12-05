@@ -6,7 +6,11 @@ from .atomic_data import (
     save_configurations_as_HDF5,
     save_dataset_as_HDF5,
 )
-from .hdf5_dataset import HDF5Dataset, HDF5DatasetCommittor
+from .hdf5_dataset import (
+    HDF5Dataset,
+    HDF5DatasetCommittorTrain,
+    HDF5DatasetCommittorValid,
+)
 from .neighborhood import get_neighborhood
 from .utils import (
     Configuration,
@@ -34,6 +38,8 @@ __all__ = [
     "load_dataset_from_HDF5",
     "merge_HDF5_files",
     "HDF5Dataset",
+    "HDF5DatasetCommittorTrain",
+    "HDF5DatasetCommittorValid",
     "save_AtomicData_to_HDF5",
     "save_configurations_as_HDF5",
 ]
