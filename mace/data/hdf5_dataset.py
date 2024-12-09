@@ -261,13 +261,11 @@ class HDF5DatasetCommittorTrain(Dataset):
 
 
 class HDF5DatasetCommittorValid(Dataset):
-    def __init__(self, file_path, r_max, z_table, indices):
+    def __init__(self, file_path, indices):
         super(  # pylint: disable=super-with-arguments
             HDF5DatasetCommittorValid, self
         ).__init__()
         self.file_path = file_path
-        self.r_max = r_max
-        self.z_table = z_table
         self._file = None
         self.keys = self.file.keys()
         self.keys = list(self.keys)
