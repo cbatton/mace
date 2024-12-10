@@ -30,6 +30,7 @@ from .loss import (
     WeightedForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
+from .loss_committor import CommittorTrainingLoss, apply_conditional_thresholds
 from .models import (
     MACE,
     AtomicDipolesMACE,
@@ -96,8 +97,11 @@ __all__ = [
     "WeightedEnergyForcesVirialsLoss",
     "WeightedEnergyForcesStressLoss",
     "DipoleSingleLoss",
+    "EnergyLoss",
     "WeightedEnergyForcesDipoleLoss",
     "WeightedHuberEnergyForcesStressLoss",
+    "CommittorTrainingLoss",
+    "apply_conditional_thresholds",
     "SymmetricContraction",
     "interaction_classes",
     "compute_mean_std_atomic_inter_energy",
