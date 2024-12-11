@@ -26,6 +26,10 @@ def committor_loss_train_log(cv: torch.Tensor, cv_dt: torch.Tensor) -> torch.Ten
     )
 
 
+def committor_loss_valid(cv_pred: torch.Tensor, cv_ref: torch.Tensor) -> torch.Tensor:
+    return torch.mean((cv_pred - cv_ref) ** 2)
+
+
 class CommittorTrainingLoss(torch.nn.Module):
     def __init__(self, train_type="log") -> None:
         super().__init__()
@@ -41,6 +45,18 @@ class CommittorTrainingLoss(torch.nn.Module):
         # detach, take mean of cv_dt along non-batch dimensions
         cv_dt = cv_dt.mean(dim=-1)
         return self.loss(cv, cv_dt)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
+
+class CommittorValidationLoss(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, cv_pred: torch.Tensor, cv_ref: torch.Tensor) -> torch.Tensor:
+        # detach, take mean of cv_dt along non-batch dimensions
+        return committor_loss_valid(cv_pred, cv_ref)
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"

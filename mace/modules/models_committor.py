@@ -28,12 +28,16 @@ from .utils import get_edge_vectors_and_lengths
 
 @compile_mode("script")
 class ParametricSigmoid(torch.nn.Module):
-    def __init__(self, p: float = 3.0):
+    def __init__(self, p: float = 3.0, c: float = 0.0):
         super().__init__()
         self.register_buffer("p", torch.tensor(p, dtype=torch.get_default_dtype()))
+        self.register_buffer("c", torch.tensor(c, dtype=torch.get_default_dtype()))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return 1.0 / (1.0 + torch.exp(-self.p * x))
+        return 1.0 / (1.0 + torch.exp(-self.p * x + self.c))
+
+    def update_c(self, new_c: float) -> None:
+        self.c.fill_(new_c)
 
 
 @compile_mode("script")
@@ -161,12 +165,31 @@ class CommittorMACE(torch.nn.Module):
     def read_MACE_model(
         self,
         model: MACE,
+        disable_grad: bool = False,
     ) -> None:
         # Load in the relevant parameters of a model
         # trained on energies and forces
         self.node_embedding.load_state_dict(model.node_embedding.state_dict())
         self.interactions.load_state_dict(model.interactions.state_dict())
         self.products.load_state_dict(model.products.state_dict())
+        # Disable requires_grad for only the loaded parameters
+        if disable_grad:
+            for param in self.node_embedding.parameters():
+                param.requires_grad_(False)
+            for param in self.interactions.parameters():
+                param.requires_grad_(False)
+            for param in self.products.parameters():
+                param.requires_grad_(False)
+
+    def disable_grad_readout(self) -> None:
+        # Disable requires_grad for the readout
+        for param in self.readouts.parameters():
+            param.requires_grad_(False)
+
+    def enable_grad_readout(self) -> None:
+        # Enable requires_grad for the readout
+        for param in self.readouts.parameters():
+            param.requires_grad_(True)
 
     def forward(
         self,

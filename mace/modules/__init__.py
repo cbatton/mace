@@ -30,7 +30,11 @@ from .loss import (
     WeightedForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
-from .loss_committor import CommittorTrainingLoss, apply_conditional_thresholds
+from .loss_committor import (
+    CommittorTrainingLoss,
+    CommittorValidationLoss,
+    apply_conditional_thresholds,
+)
 from .models import (
     MACE,
     AtomicDipolesMACE,
@@ -101,6 +105,7 @@ __all__ = [
     "WeightedEnergyForcesDipoleLoss",
     "WeightedHuberEnergyForcesStressLoss",
     "CommittorTrainingLoss",
+    "CommittorValidationLoss",
     "apply_conditional_thresholds",
     "SymmetricContraction",
     "interaction_classes",
