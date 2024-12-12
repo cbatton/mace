@@ -207,14 +207,12 @@ def train(
         new_shift = adjust_sigmoid_shift(
             model=model,
             data_loader=train_loader,
-            output_args=output_args,
             device=device,
             distributed_model=distributed_model,
             rank=rank,
-            world_size=world_size,
             distributed=distributed,
         )
-        model.psigmoid.update_c(new_shift)
+        model.psigmoid.update_c(new_shift * model.psigmoid.p)
     logging.info("Loss metrics on validation set")
     epoch = start_epoch
     valid_loss = 0.0
@@ -420,32 +418,32 @@ def train(
 def adjust_sigmoid_shift(
     model: torch.nn.Module,
     data_loader: DataLoader,
-    output_args: Dict[str, bool],
     device: torch.device,
     distributed_model: Optional[DistributedDataParallel] = None,
     rank: Optional[int] = 0,
-    world_size: Optional[int] = 1,
     distributed: bool = False,
 ) -> float:
     model_to_train = model if distributed_model is None else distributed_model
+    total_contribution = torch.zeros(
+        1.0, device=device, dtype=torch.get_default_dtype()
+    )
+    num_samples = torch.zeros(1, device=device, dtype=torch.int)
     for batch in data_loader:
-        _, opt_metrics = take_step(
-            model=model_to_train,
-            loss_fn=loss_fn,  # pylint: disable=undefined-variable
-            batch=batch,
-            optimizer=optimizer,  # pylint: disable=undefined-variable
-            ema=ema,  # pylint: disable=undefined-variable
-            output_args=output_args,
-            max_grad_norm=max_grad_norm,  # pylint: disable=undefined-variable
-            device=device,
-            world_size=world_size,
-            distributed=distributed,
+        atomic_data, _, _ = batch
+        atomic_data = atomic_data.to(device)
+        atomic_data_dict = atomic_data.to_dict()
+        output = model_to_train(atomic_data_dict)
+        total_contribution += torch.sum(output["total_contributions"]).detach()
+        num_samples += output["total_contributions"].shape[0]
+    if distributed:
+        torch.distributed.all_reduce(total_contribution)
+        torch.distributed.all_reduce(num_samples)
+    total_contribution /= num_samples
+    if (distributed and rank == 0) or not distributed:
+        logging.info(
+            f"Adjusting constant shift in model's sigmoid to {total_contribution.item()}"
         )
-        opt_metrics["mode"] = "opt"
-        opt_metrics["epoch"] = epoch  # pylint: disable=undefined-variable
-        if (distributed and rank == 0) or not distributed:
-            logger.log(opt_metrics)  # pylint: disable=undefined-variable
-    return 0.0
+    return total_contribution.item()
 
 
 def train_one_epoch(
