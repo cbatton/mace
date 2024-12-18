@@ -9,29 +9,37 @@ from typing import Dict, List, Literal, Tuple, Union
 import torch
 
 ConditionType = Union[
-    Tuple[Literal["lt", "gt"], float], Tuple[Literal["between"], float, float]
+    Tuple[Literal["lt", "gt"], float],
+    Tuple[Literal["between"], float, float],
+    Tuple[Literal["periodic"], float, float],
 ]
 DimensionCondition = Tuple[int, ConditionType]
 ConditionsDict = Dict[Literal["0", "1"], List[DimensionCondition]]
 
 
-def committor_loss_train(cv: torch.Tensor, cv_dt: torch.Tensor) -> torch.Tensor:
-    return torch.mean((cv - cv_dt) ** 2)
+def committor_loss_train(
+    committor: torch.Tensor, committor_dt: torch.Tensor
+) -> torch.Tensor:
+    return torch.mean((committor - committor_dt) ** 2)
 
 
-def committor_loss_train_log(cv: torch.Tensor, cv_dt: torch.Tensor) -> torch.Tensor:
+def committor_loss_train_log(
+    committor: torch.Tensor, committor_dt: torch.Tensor
+) -> torch.Tensor:
     return torch.mean(
-        0.5 * (torch.log(cv) - torch.log(cv_dt)) ** 2
-        + 0.5 * (torch.log(1 - cv) - torch.log(1 - cv_dt)) ** 2
+        0.5 * (torch.log(committor) - torch.log(committor_dt)) ** 2
+        + 0.5 * (torch.log(1 - committor) - torch.log(1 - committor_dt)) ** 2
     )
 
 
-def committor_loss_valid(cv_pred: torch.Tensor, cv_ref: torch.Tensor) -> torch.Tensor:
-    return torch.mean((cv_pred - cv_ref) ** 2)
+def committor_loss_valid(
+    committor_pred: torch.Tensor, committor_ref: torch.Tensor
+) -> torch.Tensor:
+    return torch.mean((committor_pred - committor_ref) ** 2)
 
 
 class CommittorTrainingLoss(torch.nn.Module):
-    def __init__(self, train_type="log") -> None:
+    def __init__(self, train_type="log", conditions: ConditionsDict = None) -> None:
         super().__init__()
         self.train_type = train_type
         if train_type == "log":
@@ -40,11 +48,18 @@ class CommittorTrainingLoss(torch.nn.Module):
             self.loss = committor_loss_train
         else:
             raise ValueError(f"Unknown train type {train_type}")
+        self.conditions = conditions
 
-    def forward(self, cv: torch.Tensor, cv_dt: torch.Tensor) -> torch.Tensor:
-        # detach, take mean of cv_dt along non-batch dimensions
-        cv_dt = cv_dt.mean(dim=-1)
-        return self.loss(cv, cv_dt)
+    def forward(
+        self, committor: torch.Tensor, committor_dt: torch.Tensor, cv_dt: torch.Tensor
+    ) -> torch.Tensor:
+        # apply conditions, then take mean of committor_dt along non-batch dimensions
+        if self.conditions is not None:
+            committor_dt = apply_conditional_thresholds(
+                cv_dt, committor_dt, self.conditions
+            )
+        committor_dt = committor_dt.mean(dim=-1)
+        return self.loss(committor, committor_dt)
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -54,9 +69,11 @@ class CommittorValidationLoss(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, cv_pred: torch.Tensor, cv_ref: torch.Tensor) -> torch.Tensor:
-        # detach, take mean of cv_dt along non-batch dimensions
-        return committor_loss_valid(cv_pred, cv_ref)
+    def forward(
+        self, committor_pred: torch.Tensor, committor_ref: torch.Tensor
+    ) -> torch.Tensor:
+        # detach, take mean of committor_dt along non-batch dimensions
+        return committor_loss_valid(committor_pred, committor_ref)
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -91,6 +108,8 @@ def apply_conditional_thresholds(
                 dim_mask = x[..., dim] > condition[1]
             elif condition[0] == "between":
                 dim_mask = (x[..., dim] > condition[1]) & (x[..., dim] < condition[2])
+            elif condition[0] == "periodic":
+                dim_mask = (x[..., dim] < condition[1]) | (x[..., dim] > condition[2])
             else:
                 raise ValueError(f"Unknown condition type: {condition[0]}")
 
