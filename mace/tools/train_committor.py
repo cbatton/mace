@@ -188,6 +188,7 @@ def train_committor(
             train_sampler.set_epoch(epoch)
         train_one_epoch(
             model=model,
+            output_args=output_args,
             loss_fn=loss_fn_train,
             data_loader=train_loader,
             optimizer=optimizer,
@@ -326,6 +327,7 @@ def adjust_sigmoid_shift(
 
 def train_one_epoch(
     model: torch.nn.Module,
+    output_args: Dict[str, bool],
     loss_fn: torch.nn.Module,
     data_loader: DataLoader,
     optimizer: torch.optim.Optimizer,
@@ -343,6 +345,7 @@ def train_one_epoch(
     for batch in data_loader:
         _, opt_metrics = take_step(
             model=model_to_train,
+            output_args=output_args,
             loss_fn=loss_fn,
             batch=batch,
             optimizer=optimizer,
@@ -360,6 +363,7 @@ def train_one_epoch(
 
 def take_step(
     model: torch.nn.Module,
+    output_args: Dict[str, bool],
     loss_fn: torch.nn.Module,
     batch: torch_geometric.batch.Batch,
     optimizer: torch.optim.Optimizer,
@@ -370,27 +374,39 @@ def take_step(
     distributed: bool = False,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
-    atomic_data, cv_data, atomic_sub_data = batch
-    atomic_data = atomic_data.to(device)
-    cv_data = cv_data.to(device)
-    optimizer.zero_grad(set_to_none=True)
-    atomic_data_dict = atomic_data.to_dict()
-    output = model(
-        atomic_data_dict,
-    )
-    output_sub = []
-    for atomic_sub in atomic_sub_data:
-        atomic_sub = atomic_sub.to(device)
-        atomic_sub_dict = atomic_sub.to_dict()
-        output_sub_ = model(
-            atomic_sub_dict,
+    loss = 0.0
+    if output_args["training_loss"] == "training":
+        atomic_data, cv_data, atomic_sub_data = batch
+        atomic_data = atomic_data.to(device)
+        cv_data = cv_data.to(device)
+        optimizer.zero_grad(set_to_none=True)
+        atomic_data_dict = atomic_data.to_dict()
+        output = model(
+            atomic_data_dict,
         )
-        for key, value in output_sub_.items():
-            if isinstance(value, torch.Tensor):
-                output_sub_.update({key: value.detach()})
-        output_sub.append(output_sub_)
-    logging.info(f"Committor output: {output['committor']}")
-    loss = loss_fn(output=output, output_sub=output_sub, cv_dt=cv_data)
+        output_sub = []
+        for atomic_sub in atomic_sub_data:
+            atomic_sub = atomic_sub.to(device)
+            atomic_sub_dict = atomic_sub.to_dict()
+            output_sub_ = model(
+                atomic_sub_dict,
+            )
+            for key, value in output_sub_.items():
+                if isinstance(value, torch.Tensor):
+                    output_sub_.update({key: value.detach()})
+            output_sub.append(output_sub_)
+        logging.info(f"Committor output: {output['committor']}")
+        loss = loss_fn(output=output, output_sub=output_sub, cv_dt=cv_data)
+    elif output_args["training_loss"] == "validation":
+        atomic_data, committor = batch
+        atomic_data = atomic_data.to(device)
+        committor = committor.to(device)
+        optimizer.zero_grad(set_to_none=True)
+        atomic_data_dict = atomic_data.to_dict()
+        output = model(
+            atomic_data_dict,
+        )
+        loss = loss_fn(output=output, committor_ref=committor)
     loss.backward()
     if max_grad_norm is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
