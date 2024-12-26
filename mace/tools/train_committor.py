@@ -305,14 +305,10 @@ def adjust_sigmoid_shift(
     model_to_train = model if distributed_model is None else distributed_model
     total_contribution = torch.zeros(1, device=device, dtype=torch.get_default_dtype())
     num_samples = torch.zeros(1, device=device, dtype=torch.int)
-    logging.info("Beginning to adjust constant shift in model's sigmoid")
     for batch in data_loader:
-        logging.info("Loading batch")
         atomic_data, _, _ = batch
-        logging.info("Batch loaded")
         atomic_data = atomic_data.to(device)
         atomic_data_dict = atomic_data.to_dict()
-        logging.info("Computing total contribution")
         output = model_to_train(atomic_data_dict)
         total_contribution += torch.sum(output["total_contributions"]).detach()
         num_samples += output["total_contributions"].shape[0]

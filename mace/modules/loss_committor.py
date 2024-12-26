@@ -63,7 +63,7 @@ class CommittorTrainingLoss(torch.nn.Module):
             committor_dt = apply_conditional_thresholds(
                 cv_dt, committor_dt, self.conditions
             )
-        committor_dt = committor_dt.mean(dim=-1)
+        committor_dt = committor_dt.mean(dim=-1).detach()
         return self.loss(committor, committor_dt)
 
     def __repr__(self):
