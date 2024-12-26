@@ -421,7 +421,10 @@ def evaluate(
     device: torch.device,
 ) -> Tuple[float, Dict[str, Any]]:
 
-    model.disable_grad_readout()
+    if not isinstance(model, DistributedDataParallel):
+        model.disable_grad_readout()
+    else:
+        model.module.disable_grad_readout()
 
     metrics = MACELoss(loss_fn=loss_fn, output_args=output_args).to(device)
 
@@ -463,7 +466,10 @@ def evaluate(
     aux["time"] = time.time() - start_time
     metrics.reset()
 
-    model.enable_grad_readout()
+    if not isinstance(model, DistributedDataParallel):
+        model.enable_grad_readout()
+    else:
+        model.module.enable_grad_readout()
 
     return avg_loss, aux
 
