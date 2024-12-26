@@ -3,6 +3,7 @@ from .cg import U_matrix_real
 from .checkpoint import CheckpointHandler, CheckpointIO, CheckpointState
 from .torch_tools import (
     TensorDict,
+    TensorDictList,
     cartesian_to_spherical,
     count_parameters,
     init_device,
@@ -34,6 +35,7 @@ from .utils import (
 
 __all__ = [
     "TensorDict",
+    "TensorDictList",
     "AtomicNumberTable",
     "atomic_numbers_to_indices",
     "to_numpy",

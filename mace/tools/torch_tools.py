@@ -6,13 +6,14 @@
 
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import torch
 from e3nn.io import CartesianTensor
 
 TensorDict = Dict[str, torch.Tensor]
+TensorDictList = List[TensorDict]
 
 
 def to_one_hot(indices: torch.Tensor, num_classes: int) -> torch.Tensor:

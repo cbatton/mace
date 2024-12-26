@@ -22,15 +22,8 @@ from torchmetrics import Metric
 
 from . import torch_geometric
 from .checkpoint import CheckpointHandler, CheckpointState
-from .torch_tools import to_numpy
-from .utils import (
-    MetricsLogger,
-    compute_mae,
-    compute_q95,
-    compute_rel_mae,
-    compute_rel_rmse,
-    compute_rmse,
-)
+from .torch_tools import TensorDict, TensorDictList, to_numpy
+from .utils import MetricsLogger
 
 
 @dataclasses.dataclass
@@ -224,6 +217,8 @@ def train_committor(
         output_args=output_args,
         device=device,
     )
+    logging.info(f"Initial loss: {valid_loss}")
+    logging.info(eval_metrics)
     if start_epoch == 0:
         if (distributed and rank == 0) or not distributed:
             valid_err_log(
@@ -438,6 +433,7 @@ def adjust_sigmoid_shift(
         output = model_to_train(atomic_data_dict)
         total_contribution += torch.sum(output["total_contributions"]).detach()
         num_samples += output["total_contributions"].shape[0]
+        break
     if distributed:
         torch.distributed.all_reduce(total_contribution)
         torch.distributed.all_reduce(num_samples)
@@ -541,20 +537,42 @@ def evaluate(
 
     model.disable_grad_readout()
 
-    metrics = MACELoss(loss_fn=loss_fn).to(device)
+    metrics = MACELoss(loss_fn=loss_fn, output_args=output_args).to(device)
 
     start_time = time.time()
-    for batch in data_loader:
-        batch = batch.to(device)
-        batch_dict = batch.to_dict()
-        output = model(
-            batch_dict,
-            training=False,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
-        )
-        avg_loss, aux = metrics(batch, output)
+    if output_args["validation_loss"] == "training":
+        for batch in data_loader:
+            atomic_data, cv_data, atomic_sub_data = batch
+            atomic_data = atomic_data.to(device)
+            cv_data = cv_data.to(device)
+            atomic_sub_data = atomic_sub_data.to(device)
+            atomic_data_dict = atomic_data.to_dict()
+            output = model(
+                atomic_data_dict,
+            )
+            output_sub = []
+            for atomic_sub in atomic_sub_data:
+                atomic_sub_dict = atomic_sub.to_dict()
+                output_sub_ = model(
+                    atomic_sub_dict,
+                )
+                for key, value in output_sub_.items():
+                    if isinstance(value, torch.Tensor):
+                        output_sub_.update({key: value.detach()})
+                output_sub.append(output_sub_)
+            avg_loss, aux = metrics(
+                output=output, output_sub=output_sub, cv_data=cv_data
+            )
+    elif output_args["validation_loss"] == "validation":
+        for batch in data_loader:
+            atomic_data, committor = batch
+            atomic_data = atomic_data.to(device)
+            committor = committor.to(device)
+            atomic_data_dict = atomic_data.to_dict()
+            output = model(
+                atomic_data_dict,
+            )
+            avg_loss, aux = metrics(output=output, committor=committor)
 
     avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time
@@ -566,64 +584,29 @@ def evaluate(
 
 
 class MACELoss(Metric):
-    def __init__(self, loss_fn: torch.nn.Module):
+    def __init__(self, loss_fn: torch.nn.Module, output_args: Dict[str, bool]):
         super().__init__()
         self.loss_fn = loss_fn
         self.add_state("total_loss", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("num_data", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("E_computed", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("delta_es", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_es_per_atom", default=[], dist_reduce_fx="cat")
-        self.add_state("Fs_computed", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("fs", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_fs", default=[], dist_reduce_fx="cat")
-        self.add_state(
-            "stress_computed", default=torch.tensor(0.0), dist_reduce_fx="sum"
-        )
-        self.add_state("delta_stress", default=[], dist_reduce_fx="cat")
-        self.add_state(
-            "virials_computed", default=torch.tensor(0.0), dist_reduce_fx="sum"
-        )
-        self.add_state("delta_virials", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_virials_per_atom", default=[], dist_reduce_fx="cat")
-        self.add_state("Mus_computed", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("mus", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_mus", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_mus_per_atom", default=[], dist_reduce_fx="cat")
+        self.loss_type = "training"
+        if output_args["validation_loss"] == "validation":
+            self.loss_type = "validation"
 
-    def update(self, batch, output):  # pylint: disable=arguments-differ
-        loss = self.loss_fn(pred=output, ref=batch)
+    def update(
+        self,
+        output: TensorDict,
+        output_sub: TensorDictList = None,
+        cv_data: torch.Tensor = None,
+        committor: torch.Tensor = None,
+    ):  # pylint: disable=arguments-differ
+        loss = 0.0
+        if self.loss_type == "training":
+            loss = self.loss_fn(output=output, output_sub=output_sub, cv_data=cv_data)
+        elif self.loss_type == "validation":
+            loss = self.loss_fn(output=output, committor_ref=committor)
         self.total_loss += loss
         self.num_data += 1
-
-        if output.get("energy") is not None and batch.energy is not None:
-            self.E_computed += 1.0
-            self.delta_es.append(batch.energy - output["energy"])
-            self.delta_es_per_atom.append(
-                (batch.energy - output["energy"]) / (batch.ptr[1:] - batch.ptr[:-1])
-            )
-        if output.get("forces") is not None and batch.forces is not None:
-            self.Fs_computed += 1.0
-            self.fs.append(batch.forces)
-            self.delta_fs.append(batch.forces - output["forces"])
-        if output.get("stress") is not None and batch.stress is not None:
-            self.stress_computed += 1.0
-            self.delta_stress.append(batch.stress - output["stress"])
-        if output.get("virials") is not None and batch.virials is not None:
-            self.virials_computed += 1.0
-            self.delta_virials.append(batch.virials - output["virials"])
-            self.delta_virials_per_atom.append(
-                (batch.virials - output["virials"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).view(-1, 1, 1)
-            )
-        if output.get("dipole") is not None and batch.dipole is not None:
-            self.Mus_computed += 1.0
-            self.mus.append(batch.dipole)
-            self.delta_mus.append(batch.dipole - output["dipole"])
-            self.delta_mus_per_atom.append(
-                (batch.dipole - output["dipole"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).unsqueeze(-1)
-            )
 
     def convert(self, delta: Union[torch.Tensor, List[torch.Tensor]]) -> np.ndarray:
         if isinstance(delta, list):
@@ -633,44 +616,4 @@ class MACELoss(Metric):
     def compute(self):
         aux = {}
         aux["loss"] = to_numpy(self.total_loss / self.num_data).item()
-        if self.E_computed:
-            delta_es = self.convert(self.delta_es)
-            delta_es_per_atom = self.convert(self.delta_es_per_atom)
-            aux["mae_e"] = compute_mae(delta_es)
-            aux["mae_e_per_atom"] = compute_mae(delta_es_per_atom)
-            aux["rmse_e"] = compute_rmse(delta_es)
-            aux["rmse_e_per_atom"] = compute_rmse(delta_es_per_atom)
-            aux["q95_e"] = compute_q95(delta_es)
-        if self.Fs_computed:
-            fs = self.convert(self.fs)
-            delta_fs = self.convert(self.delta_fs)
-            aux["mae_f"] = compute_mae(delta_fs)
-            aux["rel_mae_f"] = compute_rel_mae(delta_fs, fs)
-            aux["rmse_f"] = compute_rmse(delta_fs)
-            aux["rel_rmse_f"] = compute_rel_rmse(delta_fs, fs)
-            aux["q95_f"] = compute_q95(delta_fs)
-        if self.stress_computed:
-            delta_stress = self.convert(self.delta_stress)
-            aux["mae_stress"] = compute_mae(delta_stress)
-            aux["rmse_stress"] = compute_rmse(delta_stress)
-            aux["q95_stress"] = compute_q95(delta_stress)
-        if self.virials_computed:
-            delta_virials = self.convert(self.delta_virials)
-            delta_virials_per_atom = self.convert(self.delta_virials_per_atom)
-            aux["mae_virials"] = compute_mae(delta_virials)
-            aux["rmse_virials"] = compute_rmse(delta_virials)
-            aux["rmse_virials_per_atom"] = compute_rmse(delta_virials_per_atom)
-            aux["q95_virials"] = compute_q95(delta_virials)
-        if self.Mus_computed:
-            mus = self.convert(self.mus)
-            delta_mus = self.convert(self.delta_mus)
-            delta_mus_per_atom = self.convert(self.delta_mus_per_atom)
-            aux["mae_mu"] = compute_mae(delta_mus)
-            aux["mae_mu_per_atom"] = compute_mae(delta_mus_per_atom)
-            aux["rel_mae_mu"] = compute_rel_mae(delta_mus, mus)
-            aux["rmse_mu"] = compute_rmse(delta_mus)
-            aux["rmse_mu_per_atom"] = compute_rmse(delta_mus_per_atom)
-            aux["rel_rmse_mu"] = compute_rel_rmse(delta_mus, mus)
-            aux["q95_mu"] = compute_q95(delta_mus)
-
         return aux["loss"], aux

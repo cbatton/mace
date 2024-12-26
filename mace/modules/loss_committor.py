@@ -8,6 +8,8 @@ from typing import Dict, List, Literal, Tuple, Union
 
 import torch
 
+from mace.tools import TensorDict, TensorDictList
+
 ConditionType = Union[
     Tuple[Literal["lt", "gt"], float],
     Tuple[Literal["between"], float, float],
@@ -51,8 +53,11 @@ class CommittorTrainingLoss(torch.nn.Module):
         self.conditions = conditions
 
     def forward(
-        self, committor: torch.Tensor, committor_dt: torch.Tensor, cv_dt: torch.Tensor
+        self, output: TensorDict, output_sub: TensorDictList, cv_dt: torch.Tensor
     ) -> torch.Tensor:
+        # Extract out committor and committor_dt
+        committor = output["committor"]
+        committor_dt = torch.stack([o["committor"] for o in output_sub], dim=-1)
         # apply conditions, then take mean of committor_dt along non-batch dimensions
         if self.conditions is not None:
             committor_dt = apply_conditional_thresholds(
@@ -69,10 +74,9 @@ class CommittorValidationLoss(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(
-        self, committor_pred: torch.Tensor, committor_ref: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, output: TensorDict, committor_ref: torch.Tensor) -> torch.Tensor:
         # detach, take mean of committor_dt along non-batch dimensions
+        committor_pred = output["committor"]
         return committor_loss_valid(committor_pred, committor_ref)
 
     def __repr__(self):

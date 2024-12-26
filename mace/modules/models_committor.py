@@ -28,10 +28,16 @@ from .utils import get_edge_vectors_and_lengths
 
 @compile_mode("script")
 class ParametricSigmoid(torch.nn.Module):
-    def __init__(self, p: float = 3.0, c: float = 0.0):
+    def __init__(self, p: float = 3.0, c: float = 0.0, trainable_c: bool = False):
         super().__init__()
         self.register_buffer("p", torch.tensor(p, dtype=torch.get_default_dtype()))
-        self.register_buffer("c", torch.tensor(c, dtype=torch.get_default_dtype()))
+        self.trainable_c = trainable_c
+        if self.trainable_c:
+            self.c = torch.nn.Parameter(
+                torch.tensor(c, dtype=torch.get_default_dtype())
+            )
+        else:
+            self.register_buffer("c", torch.tensor(c, dtype=torch.get_default_dtype()))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return 1.0 / (1.0 + torch.exp(-self.p * x + self.c))
@@ -185,11 +191,15 @@ class CommittorMACE(torch.nn.Module):
         # Disable requires_grad for the readout
         for param in self.readouts.parameters():
             param.requires_grad_(False)
+        if self.psigmoid.trainable_c:
+            self.psigmoid.c.requires_grad_(False)
 
     def enable_grad_readout(self) -> None:
         # Enable requires_grad for the readout
         for param in self.readouts.parameters():
             param.requires_grad_(True)
+        if self.psigmoid.trainable_c:
+            self.psigmoid.c.requires_grad_(True)
 
     def forward(
         self,
