@@ -43,7 +43,7 @@ class ParametricSigmoid(torch.nn.Module):
         return 1.0 / (1.0 + torch.exp(-self.p * x + self.c))
 
     def update_c(self, new_c: float) -> None:
-        self.c.fill_(new_c)
+        self.c.data.fill_(new_c)
 
 
 @compile_mode("script")
@@ -67,6 +67,7 @@ class CommittorMACE(torch.nn.Module):
         radial_MLP: Optional[List[int]] = None,
         radial_type: Optional[str] = "bessel",
         p: float = 3.0,
+        trainable_c: bool = False,
     ):
         super().__init__()
         self.register_buffer(
@@ -166,7 +167,7 @@ class CommittorMACE(torch.nn.Module):
             else:
                 self.readouts.append(LinearReadoutBlock(hidden_irreps))
         # pass through a modified sigmoid
-        self.psigmoid = ParametricSigmoid(p=p)
+        self.psigmoid = ParametricSigmoid(p=p, trainable_c=trainable_c)
 
     def read_MACE_model(
         self,
