@@ -80,6 +80,7 @@ def train_committor(
     train_sampler: Optional[DistributedSampler] = None,
     rank: Optional[int] = None,
     world_size: Optional[int] = None,
+    readouts_only: bool = False,
 ):
     # Start timers if wanted
     if wall_clock_time != 0:
@@ -121,6 +122,7 @@ def train_committor(
         data_loader=valid_loader,
         output_args=output_args,
         device=device,
+        readouts_only=readouts_only,
     )
     logging.info(f"Initial loss: {valid_loss}")
     logging.info(eval_metrics)
@@ -223,6 +225,7 @@ def train_committor(
                     data_loader=valid_loader,
                     output_args=output_args,
                     device=device,
+                    readouts_only=readouts_only,
                 )
                 if (distributed and rank == 0) or not distributed:
                     valid_err_log(
@@ -442,12 +445,17 @@ def evaluate(
     data_loader: DataLoader,
     output_args: Dict[str, bool],
     device: torch.device,
+    readouts_only: bool = False,
 ) -> Tuple[float, Dict[str, Any]]:
 
-    if not isinstance(model, DistributedDataParallel):
-        model.disable_grad_readout()
+    if readouts_only:
+        if not isinstance(model, DistributedDataParallel):
+            model.disable_grad_readout()
+        else:
+            model.module.disable_grad_readout()
     else:
-        model.module.disable_grad_readout()
+        for param in model.parameters():
+            param.requires_grad = False
 
     metrics = MACELoss(loss_fn=loss_fn, output_args=output_args).to(device)
 
@@ -489,10 +497,14 @@ def evaluate(
     aux["time"] = time.time() - start_time
     metrics.reset()
 
-    if not isinstance(model, DistributedDataParallel):
-        model.enable_grad_readout()
+    if readouts_only:
+        if not isinstance(model, DistributedDataParallel):
+            model.enable_grad_readout()
+        else:
+            model.module.enable_grad_readout()
     else:
-        model.module.enable_grad_readout()
+        for param in model.parameters():
+            param.requires_grad = True
 
     return avg_loss, aux
 
