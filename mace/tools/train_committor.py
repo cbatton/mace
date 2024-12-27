@@ -104,6 +104,7 @@ def train_committor(
         new_shift = adjust_sigmoid_shift(
             model=model,
             data_loader=train_loader,
+            output_args=output_args,
             device=device,
             distributed_model=distributed_model,
             rank=rank,
@@ -298,6 +299,7 @@ def train_committor(
 def adjust_sigmoid_shift(
     model: torch.nn.Module,
     data_loader: DataLoader,
+    output_args: Dict[str, bool],
     device: torch.device,
     distributed_model: Optional[DistributedDataParallel] = None,
     rank: Optional[int] = 0,
@@ -307,7 +309,10 @@ def adjust_sigmoid_shift(
     total_contribution = torch.zeros(1, device=device, dtype=torch.get_default_dtype())
     num_samples = torch.zeros(1, device=device, dtype=torch.int)
     for batch in data_loader:
-        atomic_data, _, _ = batch
+        if output_args["training_loss"] == "training":
+            atomic_data, _, _ = batch
+        elif output_args["training_loss"] == "validation":
+            atomic_data, _ = batch
         atomic_data = atomic_data.to(device)
         atomic_data_dict = atomic_data.to_dict()
         output = model_to_train(atomic_data_dict)
@@ -406,6 +411,8 @@ def take_step(
         output = model(
             atomic_data_dict,
         )
+        logging.info(f"Committor output: {output['committor']}")
+        logging.info(f"Committor ref: {committor}")
         loss = loss_fn(output=output, committor_ref=committor)
     loss.backward()
     if max_grad_norm is not None:
