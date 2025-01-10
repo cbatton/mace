@@ -129,6 +129,7 @@ class AtomicData(torch_geometric.data.Data):
         z_table: AtomicNumberTable,
         cutoff: float,
         heads: Optional[list] = None,
+        head_index: Optional[int] = None,
     ) -> "AtomicData":
         if heads is None:
             heads = ["default"]
@@ -140,10 +141,13 @@ class AtomicData(torch_geometric.data.Data):
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
             num_classes=len(z_table),
         )
-        try:
-            head = torch.tensor(heads.index(config.head), dtype=torch.long)
-        except ValueError:
-            head = torch.tensor(len(heads) - 1, dtype=torch.long)
+        if head_index is not None:
+            head = torch.tensor(head_index, dtype=torch.long)
+        else:
+            try:
+                head = torch.tensor(heads.index(config.head), dtype=torch.long)
+            except ValueError:
+                head = torch.tensor(len(heads) - 1, dtype=torch.long)
 
         cell = (
             torch.tensor(config.cell, dtype=torch.get_default_dtype())

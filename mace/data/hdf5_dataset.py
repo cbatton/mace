@@ -104,6 +104,7 @@ class HDF5Dataset(Dataset):
             charges=torch.tensor(
                 grp["charges"][()], dtype=torch.get_default_dtype()
             ),  # [n_nodes,]
+            head=torch.tensor(grp["head"][()], dtype=torch.long),  # [,]
         )
 
         return atomic_data
@@ -160,6 +161,7 @@ class HDF5DatasetCommittorTrain(Dataset):
         stress = unpack_value(grp["stress"][()])
         virials = unpack_value(grp["virials"][()])
         charges = unpack_value(grp["charges"][()])
+        head = unpack_value(grp["head"][()])
         weight = unpack_value(grp["weight"][()])
         energy_weight = unpack_value(grp["energy_weight"][()])
         forces_weight = unpack_value(grp["forces_weight"][()])
@@ -220,6 +222,7 @@ class HDF5DatasetCommittorTrain(Dataset):
             charges=torch.tensor(
                 grp["charges"][()], dtype=torch.get_default_dtype()
             ),  # [n_nodes,]
+            head=torch.tensor(grp["head"][()], dtype=torch.long),  # [,]
         )
 
         # unpack the CV data
@@ -242,6 +245,7 @@ class HDF5DatasetCommittorTrain(Dataset):
                 virials=virials[0],
                 dipole=dipole,
                 charges=charges,
+                head=head,
                 weight=weight,
                 energy_weight=energy_weight,
                 forces_weight=forces_weight,
@@ -255,6 +259,7 @@ class HDF5DatasetCommittorTrain(Dataset):
                 config_dt,
                 z_table=self.z_table,
                 cutoff=self.r_max,
+                head_index=head,
             )
             atomic_data_dt_list.append(atomic_data_dt)
         return atomic_data, cv_data, atomic_data_dt_list
@@ -352,6 +357,7 @@ class HDF5DatasetCommittorValid(Dataset):
             charges=torch.tensor(
                 grp["charges"][()], dtype=torch.get_default_dtype()
             ),  # [n_nodes,]
+            head=torch.tensor(grp["head"][()], dtype=torch.long),  # [,]
         )
 
         # get the committor value
