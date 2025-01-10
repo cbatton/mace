@@ -47,6 +47,7 @@ class Configuration:
     stress_weight: float = 1.0  # weight of config stress in loss
     virials_weight: float = 1.0  # weight of config virial in loss
     config_type: Optional[str] = DEFAULT_CONFIG_TYPE  # config_type of config
+    head: Optional[str] = "Default"  # head used to compute the config
 
 
 Configurations = List[Configuration]
@@ -87,6 +88,7 @@ def config_from_atoms_list(
     virials_key="REF_virials",
     dipole_key="REF_dipole",
     charges_key="REF_charges",
+    head_key="head",
     config_type_weights: Dict[str, float] = None,
 ) -> Configurations:
     """Convert list of ase.Atoms into Configurations"""
@@ -104,6 +106,7 @@ def config_from_atoms_list(
                 virials_key=virials_key,
                 dipole_key=dipole_key,
                 charges_key=charges_key,
+                head_key=head_key,
                 config_type_weights=config_type_weights,
             )
         )
@@ -118,6 +121,7 @@ def config_from_atoms(
     virials_key="REF_virials",
     dipole_key="REF_dipole",
     charges_key="REF_charges",
+    head_key="head",
     config_type_weights: Dict[str, float] = None,
 ) -> Configuration:
     """Convert ase.Atoms to Configuration"""
@@ -145,6 +149,8 @@ def config_from_atoms(
     stress_weight = atoms.info.get("config_stress_weight", 1.0)
     virials_weight = atoms.info.get("config_virials_weight", 1.0)
 
+    head = atoms.info.get(head_key, "Default")
+
     # fill in missing quantities but set their weight to 0.0
     if energy is None:
         energy = 0.0
@@ -171,6 +177,7 @@ def config_from_atoms(
         dipole=dipole,
         charges=charges,
         weight=weight,
+        head=head,
         energy_weight=energy_weight,
         forces_weight=forces_weight,
         stress_weight=stress_weight,
@@ -188,11 +195,12 @@ def test_config_types(
     test_by_ct = []
     all_cts = []
     for conf in test_configs:
-        if conf.config_type not in all_cts:
-            all_cts.append(conf.config_type)
-            test_by_ct.append((conf.config_type, [conf]))
+        config_type_name = conf.config_type + "_" + conf.head
+        if config_type_name not in all_cts:
+            all_cts.append(config_type_name)
+            test_by_ct.append((config_type_name, [conf]))
         else:
-            ind = all_cts.index(conf.config_type)
+            ind = all_cts.index(config_type_name)
             test_by_ct[ind][1].append(conf)
     return test_by_ct
 
@@ -206,6 +214,8 @@ def load_from_xyz(
     virials_key: str = "REF_virials",
     dipole_key: str = "REF_dipole",
     charges_key: str = "REF_charges",
+    head_key: str = "head",
+    head_name: str = "Default",
     extract_atomic_energies: bool = False,
 ) -> Tuple[Dict[int, float], Configurations]:
     atoms_list = ase.io.read(file_path, index=":")
@@ -268,6 +278,8 @@ def load_from_xyz(
             logging.info("Using isolated atom energies from training file")
 
         atoms_list = atoms_without_iso_atoms
+    for atoms in atoms_list:
+        atoms.info[head_key] = head_name
 
     configs = config_from_atoms_list(
         atoms_list,
@@ -278,6 +290,7 @@ def load_from_xyz(
         virials_key=virials_key,
         dipole_key=dipole_key,
         charges_key=charges_key,
+        head_key=head_key,
     )
     return atomic_energies_dict, configs
 

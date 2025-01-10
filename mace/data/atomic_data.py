@@ -65,6 +65,7 @@ class AtomicData(torch_geometric.data.Data):
         unit_shifts: torch.Tensor,  # [n_edges, 3]
         cell: Optional[torch.Tensor],  # [3,3]
         weight: Optional[torch.Tensor],  # [,]
+        head: Optional[torch.Tensor],  # [,]
         energy_weight: Optional[torch.Tensor],  # [,]
         forces_weight: Optional[torch.Tensor],  # [,]
         stress_weight: Optional[torch.Tensor],  # [,]
@@ -85,6 +86,7 @@ class AtomicData(torch_geometric.data.Data):
         assert unit_shifts.shape[1] == 3
         assert len(node_attrs.shape) == 2
         assert weight is None or len(weight.shape) == 0
+        assert head is None or len(head.shape) == 0
         assert energy_weight is None or len(energy_weight.shape) == 0
         assert forces_weight is None or len(forces_weight.shape) == 0
         assert stress_weight is None or len(stress_weight.shape) == 0
@@ -106,6 +108,7 @@ class AtomicData(torch_geometric.data.Data):
             "cell": cell,
             "node_attrs": node_attrs,
             "weight": weight,
+            "head": head,
             "energy_weight": energy_weight,
             "forces_weight": forces_weight,
             "stress_weight": stress_weight,
@@ -121,8 +124,14 @@ class AtomicData(torch_geometric.data.Data):
 
     @classmethod
     def from_config(
-        cls, config: Configuration, z_table: AtomicNumberTable, cutoff: float
+        cls,
+        config: Configuration,
+        z_table: AtomicNumberTable,
+        cutoff: float,
+        heads: Optional[list] = None,
     ) -> "AtomicData":
+        if heads is None:
+            heads = ["default"]
         edge_index, shifts, unit_shifts = get_neighborhood(
             positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
@@ -131,6 +140,10 @@ class AtomicData(torch_geometric.data.Data):
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
             num_classes=len(z_table),
         )
+        try:
+            head = torch.tensor(heads.index(config.head), dtype=torch.long)
+        except ValueError:
+            head = torch.tensor(len(heads) - 1, dtype=torch.long)
 
         cell = (
             torch.tensor(config.cell, dtype=torch.get_default_dtype())
@@ -213,6 +226,7 @@ class AtomicData(torch_geometric.data.Data):
             cell=cell,
             node_attrs=one_hot,
             weight=weight,
+            head=head,
             energy_weight=energy_weight,
             forces_weight=forces_weight,
             stress_weight=stress_weight,
@@ -323,6 +337,7 @@ def save_dataset_as_HDF5(
                 compression_opts=compression_level,
                 dtype="f8",
             )
+            grp.create_dataset("head", data=data.head, dtype="i8")
             try:
                 grp.create_dataset(
                     "dipole",
@@ -400,6 +415,7 @@ def load_dataset_from_HDF5(file_path: str) -> List[AtomicData]:
                 charges=torch.tensor(
                     grp["charges"][()], dtype=torch.get_default_dtype()
                 ),  # [n_nodes,]
+                head=torch.tensor(grp["head"][()], dtype=torch.long),  # [,]
             )
 
             # Append to the list of dataset
@@ -441,6 +457,7 @@ def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
     grp["virials"] = data.virials
     grp["dipole"] = data.dipole
     grp["charges"] = data.charges
+    grp["head"] = data.head
 
 
 def save_configurations_as_HDF5(configurations: Configurations, _, h5_file) -> None:
@@ -454,6 +471,7 @@ def save_configurations_as_HDF5(configurations: Configurations, _, h5_file) -> N
         subgroup["forces"] = write_value(config.forces)
         subgroup["stress"] = write_value(config.stress)
         subgroup["virials"] = write_value(config.virials)
+        subgroup["head"] = write_value(config.head)
         subgroup["dipole"] = write_value(config.dipole)
         subgroup["charges"] = write_value(config.charges)
         subgroup["cell"] = write_value(config.cell)
