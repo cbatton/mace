@@ -48,6 +48,7 @@ def valid_err_log(
     log_errors,
     forces=False,
     epoch=None,
+    valid_loader_name="Default",
 ):
     eval_metrics["mode"] = "eval"
     eval_metrics["epoch"] = epoch
@@ -61,11 +62,11 @@ def valid_err_log(
         if forces:
             error_f = eval_metrics["rmse_f"] * 1e3
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
             )
         else:
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV"
             )
     elif (
         log_errors == "PerAtomRMSEstressvirials"
@@ -75,7 +76,7 @@ def valid_err_log(
         error_f = eval_metrics["rmse_f"] * 1e3
         error_stress = eval_metrics["rmse_stress"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_stress={error_stress:8.3f} meV / A^3",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_stress={error_stress:8.3f} meV / A^3",
         )
     elif (
         log_errors == "PerAtomRMSEstressvirials"
@@ -85,7 +86,7 @@ def valid_err_log(
         error_f = eval_metrics["rmse_f"] * 1e3
         error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_virials_per_atom={error_virials:8.3f} meV",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_virials_per_atom={error_virials:8.3f} meV",
         )
     elif (
         log_errors == "PerAtomMAEstressvirials"
@@ -95,7 +96,7 @@ def valid_err_log(
         error_f = eval_metrics["mae_f"] * 1e3
         error_stress = eval_metrics["mae_stress"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_stress={error_stress:8.3f} meV / A^3"
+            f"{inintial_phrase}: loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_stress={error_stress:8.3f} meV / A^3"
         )
     elif (
         log_errors == "PerAtomMAEstressvirials"
@@ -105,52 +106,52 @@ def valid_err_log(
         error_f = eval_metrics["mae_f"] * 1e3
         error_virials = eval_metrics["mae_virials"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_virials={error_virials:8.3f} meV"
+            f"{inintial_phrase}: loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_virials={error_virials:8.3f} meV"
         )
     elif log_errors == "TotalRMSE":
         error_e = eval_metrics["rmse_e"] * 1e3
         if forces:
             error_f = eval_metrics["rmse_f"] * 1e3
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
             )
         else:
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E={error_e:8.3f} meV"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E={error_e:8.3f} meV"
             )
     elif log_errors == "PerAtomMAE":
         error_e = eval_metrics["mae_e_per_atom"] * 1e3
         if forces:
             error_f = eval_metrics["mae_f"] * 1e3
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
             )
         else:
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E_per_atom={error_e:8.3f} meV"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV"
             )
     elif log_errors == "TotalMAE":
         error_e = eval_metrics["mae_e"] * 1e3
         if forces:
             error_f = eval_metrics["mae_f"] * 1e3
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
             )
         else:
             logging.info(
-                f"{inintial_phrase}: loss={valid_loss:8.4f}, MAE_E={error_e:8.3f} meV"
+                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E={error_e:8.3f} meV"
             )
     elif log_errors == "DipoleRMSE":
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
         )
     elif log_errors == "EnergyDipoleRMSE":
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
         error_f = eval_metrics["rmse_f"] * 1e3
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.4f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
         )
 
 
@@ -158,7 +159,7 @@ def train(
     model: torch.nn.Module,
     loss_fn: torch.nn.Module,
     train_loader: DataLoader,
-    valid_loader: DataLoader,
+    valid_loaders: Dict[str, DataLoader],
     optimizer: torch.optim.Optimizer,
     lr_scheduler: torch.optim.lr_scheduler.ExponentialLR,
     start_epoch: int,
@@ -203,33 +204,36 @@ def train(
     logging.info("Loss metrics on validation set")
     epoch = start_epoch
     valid_loss = 0.0
-    valid_loss, eval_metrics = evaluate(
-        model=model,
-        loss_fn=loss_fn,
-        data_loader=valid_loader,
-        output_args=output_args,
-        device=device,
-    )
-    if start_epoch == 0:
-        if (distributed and rank == 0) or not distributed:
-            valid_err_log(
-                valid_loss,
-                eval_metrics,
-                logger,
-                log_errors,
-                output_args["forces"],
-                None,
-            )
-    else:
-        if (distributed and rank == 0) or not distributed:
-            valid_err_log(
-                valid_loss,
-                eval_metrics,
-                logger,
-                log_errors,
-                output_args["forces"],
-                start_epoch,
-            )
+    for valid_loader_name, valid_loader in valid_loaders.items():
+        valid_loss_head, eval_metrics = evaluate(
+            model=model,
+            loss_fn=loss_fn,
+            data_loader=valid_loader,
+            output_args=output_args,
+            device=device,
+        )
+        if start_epoch == 0:
+            if (distributed and rank == 0) or not distributed:
+                valid_err_log(
+                    valid_loss,
+                    eval_metrics,
+                    logger,
+                    log_errors,
+                    output_args["forces"],
+                    None,
+                    valid_loader_name,
+                )
+        else:
+            if (distributed and rank == 0) or not distributed:
+                valid_err_log(
+                    valid_loss,
+                    eval_metrics,
+                    logger,
+                    log_errors,
+                    output_args["forces"],
+                    start_epoch,
+                    valid_loader_name,
+                )
 
     while epoch < max_num_epochs:
         # Check time
@@ -307,43 +311,48 @@ def train(
             with param_context:
                 valid_loss = 0.0
                 wandb_log_dict = {}
-                valid_loss, eval_metrics = evaluate(
-                    model=model_to_evaluate,
-                    loss_fn=loss_fn,
-                    data_loader=valid_loader,
-                    output_args=output_args,
-                    device=device,
-                )
-                if (distributed and rank == 0) or not distributed:
-                    valid_err_log(
-                        valid_loss,
-                        eval_metrics,
-                        logger,
-                        log_errors,
-                        output_args["forces"],
-                        epoch,
+                for valid_loader_name, valid_loader in valid_loaders.items():
+                    valid_loss_head, eval_metrics = evaluate(
+                        model=model_to_evaluate,
+                        loss_fn=loss_fn,
+                        data_loader=valid_loader,
+                        output_args=output_args,
+                        device=device,
                     )
-                    if log_wandb:
-                        if output_args["forces"]:
-                            wandb_log_dict = {
-                                "epoch": epoch,
-                                "valid_loss": valid_loss,
-                                "valid_rmse_e_per_atom": eval_metrics[
-                                    "rmse_e_per_atom"
-                                ],
-                                "valid_rmse_f": eval_metrics["rmse_f"],
-                            }
-                            wandb.log(wandb_log_dict)
-                        else:
-                            wandb_log_dict = {
-                                "epoch": epoch,
-                                "valid_loss": valid_loss,
-                                "valid_rmse_e_per_atom": eval_metrics[
-                                    "rmse_e_per_atom"
-                                ],
-                            }
-                            wandb.log(wandb_log_dict)
+                    if (distributed and rank == 0) or not distributed:
+                        valid_err_log(
+                            valid_loss_head,
+                            eval_metrics,
+                            logger,
+                            log_errors,
+                            output_args["forces"],
+                            epoch,
+                            valid_loader_name,
+                        )
+                        if log_wandb:
+                            if output_args["forces"]:
+                                wandb_log_dict[valid_loader_name] = {
+                                    "epoch": epoch,
+                                    "valid_loss": valid_loss_head,
+                                    "valid_rmse_e_per_atom": eval_metrics[
+                                        "rmse_e_per_atom"
+                                    ],
+                                    "valid_rmse_f": eval_metrics["rmse_f"],
+                                }
+                                wandb.log(wandb_log_dict)
+                            else:
+                                wandb_log_dict[valid_loader_name] = {
+                                    "epoch": epoch,
+                                    "valid_loss": valid_loss_head,
+                                    "valid_rmse_e_per_atom": eval_metrics[
+                                        "rmse_e_per_atom"
+                                    ],
+                                }
+                                wandb.log(wandb_log_dict)
 
+            valid_loss = (
+                valid_loss_head  # consider only the last head for the checkpoint
+            )
             if (distributed and rank == 0) or not distributed:
                 if valid_loss >= lowest_loss:
                     patience_counter += 1

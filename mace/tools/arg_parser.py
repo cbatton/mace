@@ -336,6 +336,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         required=False,
     )
     parser.add_argument(
+        "--heads",
+        help="Dict of heads: containing individual files and E0s",
+        type=str,
+        default=None,
+        required=False,
+    )
+    parser.add_argument(
         "--energy_key",
         help="Key of reference energies in training xyz",
         type=str,

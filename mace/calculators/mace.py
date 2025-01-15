@@ -128,6 +128,10 @@ class MACECalculator(Calculator):
             [int(z) for z in self.models[0].atomic_numbers]
         )
         self.charges_key = charges_key
+        try:
+            self.heads = self.models[0].heads
+        except AttributeError:
+            self.heads = ["Default"]
         model_dtype = get_model_dtype(self.models[0])
         if default_dtype == "":
             print(
@@ -203,8 +207,12 @@ class MACECalculator(Calculator):
 
         if self.model_type in ["MACE", "EnergyDipoleMACE"]:
             batch = next(iter(data_loader)).to(self.device)
-            node_e0 = self.models[0].atomic_energies_fn(batch["node_attrs"])
-            compute_stress = True
+            node_heads = batch["head"][batch["batch"]]
+            num_atoms_arange = torch.arange(batch["positions"].shape[0])
+            node_e0 = self.models[0].atomic_energies_fn(batch["node_attrs"])[
+                num_atoms_arange, node_heads
+            ]
+            compute_stress = not self.use_compile
         else:
             compute_stress = False
 
@@ -214,7 +222,11 @@ class MACECalculator(Calculator):
         )
         for i, model in enumerate(self.models):
             batch = batch_base.clone()
-            out = model(batch.to_dict(), compute_stress=compute_stress)
+            out = model(
+                batch.to_dict(),
+                compute_stress=compute_stress,
+                training=self.use_compile,
+            )
             if self.model_type in ["MACE", "EnergyDipoleMACE"]:
                 ret_tensors["energies"][i] = out["energy"].detach()
                 ret_tensors["node_energy"][i] = (out["node_energy"] - node_e0).detach()
@@ -232,7 +244,7 @@ class MACECalculator(Calculator):
             )
             self.results["free_energy"] = self.results["energy"]
             self.results["node_energy"] = (
-                torch.mean(ret_tensors["node_energy"] - node_e0, dim=0).cpu().numpy()
+                torch.mean(ret_tensors["node_energy"], dim=0).cpu().numpy()
             )
             self.results["forces"] = (
                 torch.mean(ret_tensors["forces"], dim=0).cpu().numpy()
