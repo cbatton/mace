@@ -1,9 +1,10 @@
 import re
+from typing import List
 
 import h5py
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import ConcatDataset, Dataset
 
 from mace.data.atomic_data import AtomicData
 from mace.data.utils import Configuration
@@ -364,6 +365,13 @@ class HDF5DatasetCommittorValid(Dataset):
         committor = torch.tensor(grp["committor"][()], dtype=torch.get_default_dtype())
 
         return atomic_data, committor
+
+
+def dataset_from_sharded_hdf5(files: List[str], indices: List[torch.Tensor]):
+    datasets = []
+    for file in files:
+        datasets.append(HDF5Dataset(file, indices))
+    return ConcatDataset(datasets)
 
 
 def unpack_value(value):
