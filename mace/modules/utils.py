@@ -197,12 +197,12 @@ def compute_mean_std_atomic_inter_energy(
         node_e0 = atomic_energies_fn(batch.node_attrs)
         graph_e0s = scatter_sum(
             src=node_e0, index=batch.batch, dim=0, dim_size=batch.num_graphs
-        )[torch.arange(batch.num_graphs), batch.head]
+        )[torch.arange(batch.num_graphs), batch.head * 0]
         graph_sizes = batch.ptr[1:] - batch.ptr[:-1]
         avg_atom_inter_es_list.append(
             (batch.energy - graph_e0s) / graph_sizes
         )  # {[n_graphs], }
-        head_list.append(batch.head)
+        head_list.append(batch.head * 0)
 
     avg_atom_inter_es = torch.cat(avg_atom_inter_es_list)  # [total_n_graphs]
     head = torch.cat(head_list, dim=0)  # [total_n_graphs]
@@ -212,7 +212,7 @@ def compute_mean_std_atomic_inter_energy(
     std = to_numpy(scatter_std(src=avg_atom_inter_es, index=head, dim=0).squeeze(-1))
     std = _check_non_zero(std)
 
-    return mean, std
+    return mean.item(), std[0]
 
 
 def compute_mean_rms_energy_forces(
@@ -227,7 +227,7 @@ def compute_mean_rms_energy_forces(
     head_batch = []
 
     for batch in data_loader:
-        head = batch.head
+        head = batch.head * 0
         node_e0 = atomic_energies_fn(batch.node_attrs)
         graph_e0s = scatter_sum(
             src=node_e0, index=batch.batch, dim=0, dim_size=batch.num_graphs
@@ -255,7 +255,7 @@ def compute_mean_rms_energy_forces(
     )
     rms = _check_non_zero(rms)
 
-    return mean, rms
+    return mean.item(), rms[0]
 
 
 def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float:

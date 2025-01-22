@@ -52,6 +52,7 @@ def valid_err_log(
 ):
     eval_metrics["mode"] = "eval"
     eval_metrics["epoch"] = epoch
+    eval_metrics["head"] = valid_loader_name
     logger.log(eval_metrics)
     if epoch is None:
         inintial_phrase = "Initial"
@@ -215,7 +216,7 @@ def train(
         if start_epoch == 0:
             if (distributed and rank == 0) or not distributed:
                 valid_err_log(
-                    valid_loss,
+                    valid_loss_head,
                     eval_metrics,
                     logger,
                     log_errors,
@@ -226,7 +227,7 @@ def train(
         else:
             if (distributed and rank == 0) or not distributed:
                 valid_err_log(
-                    valid_loss,
+                    valid_loss_head,
                     eval_metrics,
                     logger,
                     log_errors,

@@ -128,7 +128,6 @@ class MACE(torch.nn.Module):
         self.products = torch.nn.ModuleList([prod])
 
         self.readouts = torch.nn.ModuleList()
-        self.readouts.append(LinearReadoutBlock(hidden_irreps))
         self.readouts.append(
             LinearReadoutBlock(hidden_irreps, o3.Irreps(f"{len(heads)}x0e"))
         )

@@ -8,6 +8,7 @@ import dataclasses
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 from e3nn import o3
 from prettytable import PrettyTable
@@ -261,6 +262,25 @@ def remove_pt_head(
     new_model.load_state_dict(new_state_dict)
 
     return new_model
+
+
+def dict_to_array(input_data, heads):
+    if all(isinstance(value, np.ndarray) for value in input_data.values()):
+        return np.array([input_data[head] for head in heads])
+    if not all(isinstance(value, dict) for value in input_data.values()):
+        return np.array([[input_data[head]] for head in heads])
+    unique_keys = set()
+    for inner_dict in input_data.values():
+        unique_keys.update(inner_dict.keys())
+    unique_keys = list(unique_keys)
+    sorted_keys = sorted([int(key) for key in unique_keys])
+    result_array = np.zeros((len(input_data), len(sorted_keys)))
+    for _, (head_name, inner_dict) in enumerate(input_data.items()):
+        for key, value in inner_dict.items():
+            key_index = sorted_keys.index(int(key))
+            head_index = heads.index(head_name)
+            result_array[head_index][key_index] = value
+    return result_array
 
 
 class LRScheduler:

@@ -43,7 +43,11 @@ class LinearReadoutBlock(torch.nn.Module):
         super().__init__()
         self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=irreps_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+    def forward(
+        self,
+        x: torch.Tensor,
+        heads: Optional[torch.Tensor] = None,  # pylint: disable=unused-argument
+    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         return self.linear(x)  # [n_nodes, 1]
 
 
