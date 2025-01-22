@@ -264,8 +264,6 @@ def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float
     for batch in data_loader:
         _, receivers = batch.edge_index
         _, counts = torch.unique(receivers, return_counts=True)
-        mask = [batch.head == 0]
-        counts = counts[mask]
         num_neighbors.append(counts)
 
     avg_num_neighbors = torch.mean(
