@@ -164,7 +164,6 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
             model.radial_embedding.bessel_fn.__class__.__name__
         ),
         "radial_MLP": model.interactions[0].conv_tp_weights.hs[1:-1],
-        "pair_repulsion": hasattr(model, "pair_repulsion_fn"),
         "atomic_inter_scale": scale.cpu().numpy(),
         "atomic_inter_shift": shift.cpu().numpy(),
         "heads": heads,
