@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import re
 from typing import Dict, List, Tuple
 
 import torch
@@ -87,6 +86,11 @@ def transfer_weights(
     # Transfer symmetric contractions
     transfer_symmetric_contractions(source_dict, target_dict, max_L, correlation)
 
+    # Unsqueeze linear and skip_tp layers
+    for key in source_dict.keys():
+        if any(x in key for x in ["linear", "skip_tp"]) and "weight" in key:
+            target_dict[key] = target_dict[key].unsqueeze(0)
+
     transferred_keys = set(transfer_keys)
     remaining_keys = (
         set(source_dict.keys()) & set(target_dict.keys()) - transferred_keys
@@ -109,38 +113,6 @@ def transfer_weights(
         ].avg_num_neighbors
 
     # Load state dict into target model
-    # for name, param in target_model.named_parameters():
-    # print(f"Target {name}, {param.shape}")
-    # for name, param in source_model.named_parameters():
-    # print(f"Source {name}, {param.shape}")
-    # for key in target_dict.keys():
-    # print(f"key {key} {target_dict[key].shape}")
-    for key, value in target_dict.items():
-        if (
-            "linear.weight" in key
-            or "linear_up.weight" in key
-            or "skip_tp.weight" in key
-            or re.search(r"linear_\d+\.weight", key)
-        ):
-            print(key, value.shape)
-            if len(value.shape) != 2:
-                try:
-                    new_value = value.unsqueeze(0)
-                    target_dict[key] = new_value
-                    print(f"Reshaped {key} from {value.shape} to {new_value.shape}")
-
-                except Exception as e:  # pylint: disable=W0718
-                    print(f"Failed to reshape {key}: {e}")
-                    target_dict[key] = value  # Keep the original value
-            else:
-                # Already in the correct shape
-                target_dict[key] = value
-        else:
-            # Not a target key, keep it as is
-            target_dict[key] = value
-    # print("AFTER CHANGING SHAPE")
-    # for key in target_dict.keys():
-    # print(f"key {key} {target_dict[key].shape}")
     target_model.load_state_dict(target_dict)
 
 

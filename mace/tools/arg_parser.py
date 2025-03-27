@@ -556,6 +556,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=check_float_or_none,
         default=10.0,
     )
+    # option for cuequivariance acceleration
+    parser.add_argument(
+        "--enable_cueq",
+        help="Enable cuequivariance acceleration",
+        type=boolean_string,
+        default=False,
+    )
     parser.add_argument(
         "--wall_clock_time",
         help="Maximum wall clock time in seconds",

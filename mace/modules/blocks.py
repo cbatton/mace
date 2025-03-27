@@ -254,6 +254,16 @@ class EquivariantProductBasisBlock(torch.nn.Module):
             shared_weights=True,
             cueq_config=cueq_config,
         )
+        self.cueq_enabled = False
+        self.cueq_layout_str = "mul_ir"
+        self.cueq_optimize_all = False
+        self.cueq_optimize_symmetric = False
+
+        if cueq_config is not None:
+            self.cueq_enabled = cueq_config.enabled
+            self.cueq_layout_str = cueq_config.layout_str
+            self.cueq_optimize_symmetric = cueq_config.optimize_symmetric
+            self.cueq_optimize_all = cueq_config.optimize_all
 
     def forward(
         self,
@@ -261,10 +271,25 @@ class EquivariantProductBasisBlock(torch.nn.Module):
         sc: Optional[torch.Tensor],
         node_attrs: torch.Tensor,
     ) -> torch.Tensor:
-        node_feats = self.symmetric_contractions(node_feats, node_attrs)
+        use_cueq = False
+        use_cueq_mul_ir = False
+        if self.cueq_enabled:
+            if self.cueq_optimize_all or self.cueq_optimize_symmetric:
+                use_cueq = True
+            if self.cueq_layout_str == "mul_ir":
+                use_cueq_mul_ir = True
+        if use_cueq:
+            if use_cueq_mul_ir:
+                node_feats = torch.transpose(node_feats, 1, 2)
+            index_attrs = torch.nonzero(node_attrs)[:, 1].int()
+            node_feats = self.symmetric_contractions(
+                node_feats.flatten(1),
+                index_attrs,
+            )
+        else:
+            node_feats = self.symmetric_contractions(node_feats, node_attrs)
         if self.use_sc and sc is not None:
             return self.linear(node_feats) + sc
-
         return self.linear(node_feats)
 
 
@@ -674,7 +699,9 @@ class RealAgnosticResidualInteractionBlock(InteractionBlock):
         )
         # TensorProduct
         irreps_mid, instructions = tp_out_irreps_with_instructions(
-            self.node_feats_irreps, self.edge_attrs_irreps, self.target_irreps
+            self.node_feats_irreps,
+            self.edge_attrs_irreps,
+            self.target_irreps,
         )
         self.conv_tp = TensorProduct(
             self.node_feats_irreps,

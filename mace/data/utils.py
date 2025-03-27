@@ -89,7 +89,7 @@ def config_from_atoms_list(
     dipole_key="REF_dipole",
     charges_key="REF_charges",
     head_key="head",
-    config_type_weights: Dict[str, float] = None,
+    config_type_weights: Optional[Dict[str, float]] = None,
 ) -> Configurations:
     """Convert list of ase.Atoms into Configurations"""
     if config_type_weights is None:
@@ -122,7 +122,7 @@ def config_from_atoms(
     dipole_key="REF_dipole",
     charges_key="REF_charges",
     head_key="head",
-    config_type_weights: Dict[str, float] = None,
+    config_type_weights: Optional[Dict[str, float]] = None,
 ) -> Configuration:
     """Convert ase.Atoms to Configuration"""
     if config_type_weights is None:
@@ -130,7 +130,7 @@ def config_from_atoms(
 
     energy = atoms.info.get(energy_key, None)  # eV
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
-    stress = atoms.info.get(stress_key, None)  # eV / Ang^3
+    stress = atoms.info.get(stress_key, None)  # eV / Ang ^ 3
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
     # Charges default to 0 instead of None if not found

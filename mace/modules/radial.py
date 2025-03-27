@@ -89,23 +89,26 @@ class PolynomialCutoff(torch.nn.Module):
 
     def __init__(self, r_max: float, p=6):
         super().__init__()
-        self.register_buffer("p", torch.tensor(p, dtype=torch.get_default_dtype()))
+        self.register_buffer("p", torch.tensor(p, dtype=torch.int))
         self.register_buffer(
             "r_max", torch.tensor(r_max, dtype=torch.get_default_dtype())
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # yapf: disable
-        envelope = (
-                1.0
-                - ((self.p + 1.0) * (self.p + 2.0) / 2.0) * torch.pow(x / self.r_max, self.p)
-                + self.p * (self.p + 2.0) * torch.pow(x / self.r_max, self.p + 1)
-                - (self.p * (self.p + 1.0) / 2) * torch.pow(x / self.r_max, self.p + 2)
-        )
-        # yapf: enable
+        return self.calculate_envelope(x, self.r_max, self.p.to(torch.int))
 
-        # noinspection PyUnresolvedReferences
-        return envelope * (x < self.r_max)
+    @staticmethod
+    def calculate_envelope(
+        x: torch.Tensor, r_max: torch.Tensor, p: torch.Tensor
+    ) -> torch.Tensor:
+        r_over_r_max = x / r_max
+        envelope = (
+            1.0
+            - ((p + 1.0) * (p + 2.0) / 2.0) * torch.pow(r_over_r_max, p)
+            + p * (p + 2.0) * torch.pow(r_over_r_max, p + 1)
+            - (p * (p + 1.0) / 2) * torch.pow(r_over_r_max, p + 2)
+        )
+        return envelope * (x < r_max)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(p={self.p}, r_max={self.r_max})"

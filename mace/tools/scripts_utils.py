@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import ast
 import dataclasses
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -110,6 +111,21 @@ def get_dataset_from_xyz(
     )
 
 
+def get_config_type_weights(ct_weights):
+    """
+    Get config type weights from command line argument
+    """
+    try:
+        config_type_weights = ast.literal_eval(ct_weights)
+        assert isinstance(config_type_weights, dict)
+    except Exception as e:  # pylint: disable=W0703
+        logging.warning(
+            f"Config type weights not specified correctly ({e}), using Default"
+        )
+        config_type_weights = {"Default": 1.0}
+    return config_type_weights
+
+
 def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
     if model.__class__.__name__ != "ScaleShiftMACE":
         return {"error": "Model is not a ScaleShiftMACE model"}
@@ -169,6 +185,12 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
         "heads": heads,
     }
     return config
+
+
+def extract_load(f: str, map_location: str = "cpu") -> torch.nn.Module:
+    return extract_model(
+        torch.load(f=f, map_location=map_location), map_location=map_location
+    )
 
 
 def remove_pt_head(
@@ -261,6 +283,12 @@ def remove_pt_head(
     new_model.load_state_dict(new_state_dict)
 
     return new_model
+
+
+def extract_model(model: torch.nn.Module, map_location: str = "cpu") -> torch.nn.Module:
+    model_copy = model.__class__(**extract_config_mace_model(model))
+    model_copy.load_state_dict(model.state_dict())
+    return model_copy.to(map_location)
 
 
 def dict_to_array(input_data, heads):
