@@ -23,7 +23,7 @@ from torchmetrics import Metric
 from . import torch_geometric
 from .checkpoint import CheckpointHandler, CheckpointState
 from .torch_tools import TensorDict, TensorDictList, to_numpy
-from .utils import MetricsLogger
+from .utils import MetricsLogger, compute_mae, compute_rmse
 
 
 @dataclasses.dataclass
@@ -47,9 +47,14 @@ def valid_err_log(
         inintial_phrase = "Initial"
     else:
         inintial_phrase = f"Epoch {epoch}"
-    logging.info(
-        f"{inintial_phrase}: loss={valid_loss:8.4f}",
-    )
+    if eval_metrics.get("mae_Cs") is not None:
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}, mae_Cs={eval_metrics['mae_Cs']:.4f}, rmse_Cs={eval_metrics['rmse_Cs']:.4f}"
+        )
+    else:
+        logging.info(
+            f"{inintial_phrase}: loss={valid_loss:8.4f}",
+        )
 
 
 def train_committor(
@@ -515,6 +520,8 @@ class MACELoss(Metric):
         self.loss_fn = loss_fn
         self.add_state("total_loss", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("num_data", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("Cs_computed", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("delta_Cs", default=[], dist_reduce_fx="cat")
         self.loss_type = "training"
         if output_args["validation_loss"] == "validation":
             self.loss_type = "validation"
@@ -534,6 +541,10 @@ class MACELoss(Metric):
         self.total_loss += loss
         self.num_data += 1
 
+        if committor is not None:
+            self.Cs_computed += 1
+            self.delta_Cs.append(output["committor"] - committor)
+
     def convert(self, delta: Union[torch.Tensor, List[torch.Tensor]]) -> np.ndarray:
         if isinstance(delta, list):
             delta = torch.cat(delta)
@@ -542,4 +553,8 @@ class MACELoss(Metric):
     def compute(self):
         aux = {}
         aux["loss"] = to_numpy(self.total_loss / self.num_data).item()
+        if self.Cs_computed:
+            delta_Cs = self.convert(self.delta_Cs)
+            aux["mae_Cs"] = compute_mae(delta_Cs)
+            aux["rmse_Cs"] = compute_rmse(delta_Cs)
         return aux["loss"], aux
