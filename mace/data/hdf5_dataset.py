@@ -21,11 +21,12 @@ def natural_sort(l):
 
 
 class HDF5Dataset(Dataset):
-    def __init__(self, file_path, indices):
+    def __init__(self, file_path, indices, weight=None):
         super(HDF5Dataset, self).__init__()  # pylint: disable=super-with-arguments
         self.file_path = file_path
         self.indices = indices
         self._file = None
+        self.weight = weight
 
     @property
     def file(self):
@@ -55,6 +56,13 @@ class HDF5Dataset(Dataset):
             if "dipole" in grp
             else None
         )
+        # Use self.weight if it is provided, otherwise get from file
+        weight = (
+            torch.tensor(self.weight, dtype=torch.get_default_dtype())
+            if self.weight is not None
+            else torch.tensor(grp["weight"][()], dtype=torch.get_default_dtype())
+        )
+
         atomic_data = AtomicData(
             edge_index=torch.tensor(
                 grp["edge_index"][()], dtype=torch.long
@@ -74,9 +82,7 @@ class HDF5Dataset(Dataset):
             cell=torch.tensor(
                 grp["cell"][()], dtype=torch.get_default_dtype()
             ),  # [3, 3]
-            weight=torch.tensor(
-                grp["weight"][()], dtype=torch.get_default_dtype()
-            ),  # [,]
+            weight=weight,  # [,]
             energy_weight=torch.tensor(
                 grp["energy_weight"][()], dtype=torch.get_default_dtype()
             ),  # [,]
