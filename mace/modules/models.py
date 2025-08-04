@@ -60,6 +60,7 @@ class MACE(torch.nn.Module):
         radial_type: Optional[str] = "bessel",
         heads: Optional[List[str]] = None,
         cueq_config: Optional[Dict[str, Any]] = None,
+        total_charge: Optional[int] = 0,
     ):
         super().__init__()
         self.register_buffer(
@@ -185,6 +186,25 @@ class MACE(torch.nn.Module):
                     )
                 )
 
+        self.charge_readouts = torch.nn.ModuleList()
+        if total_charge is not None:
+            print("Setting total charge to", total_charge)
+            self.register_buffer(
+                "total_charge", torch.tensor(total_charge, dtype=torch.float64)
+            )
+            self.charge_readouts.append(
+                NonLinearReadoutBlock(
+                    hidden_irreps_out,
+                    (len(heads) * MLP_irreps).simplify(),
+                    gate,
+                    o3.Irreps(f"{len(heads)}x0e"),
+                    len(heads),
+                    cueq_config,
+                )
+            )
+        else:
+            self.total_charge = None
+
     def forward(
         self,
         data: Dict[str, torch.Tensor],
@@ -273,6 +293,22 @@ class MACE(torch.nn.Module):
             energies.append(energy)
             node_energies_list.append(node_energies)
 
+        if self.total_charge is not None:
+            # Compute the per atom charge
+            node_charges = self.charge_readouts[0](node_feats_list[-1], node_heads)
+            total_charge = scatter_sum(
+                src=node_charges, index=data["batch"], dim=0, dim_size=num_graphs
+            )
+            n_nodes = scatter_sum(
+                src=torch.ones_like(node_charges),
+                index=data["batch"],
+                dim=0,
+                dim_size=num_graphs,
+            )
+            deviation = (total_charge - self.total_charge) / n_nodes
+            node_deviation = deviation[data["batch"]]
+            node_charges = node_charges - node_deviation
+
         # Concatenate node features
         node_feats_out = torch.cat(node_feats_list, dim=-1)
 
@@ -305,6 +341,7 @@ class MACE(torch.nn.Module):
             "displacement": displacement,
             "hessian": hessian,
             "node_feats": node_feats_out,
+            "charges": node_charges if self.total_charge is not None else None,
         }
 
 
@@ -398,6 +435,26 @@ class ScaleShiftMACE(MACE):
                 readout(node_feats, node_heads)[num_atoms_arange, node_heads]
             )  # {[n_nodes, ], }
 
+        # Charge computation (replicated from MACE)
+        node_charges = None
+        if self.total_charge is not None:
+            # Compute the per atom charge using the last node features
+            node_charges = self.charge_readouts[0](node_feats_list[-1], node_heads)[
+                num_atoms_arange, node_heads
+            ]
+            total_charge = scatter_sum(
+                src=node_charges, index=data["batch"], dim=0, dim_size=num_graphs
+            )
+            n_nodes = scatter_sum(
+                src=torch.ones_like(node_charges),
+                index=data["batch"],
+                dim=0,
+                dim_size=num_graphs,
+            )
+            deviation = (total_charge - self.total_charge) / n_nodes
+            node_deviation = deviation[data["batch"]]
+            node_charges = node_charges - node_deviation
+
         # Concatenate node features
         node_feats_out = torch.cat(node_feats_list, dim=-1)
         # Sum over interactions
@@ -435,6 +492,7 @@ class ScaleShiftMACE(MACE):
             "hessian": hessian,
             "displacement": displacement,
             "node_feats": node_feats_out,
+            "charges": node_charges if self.total_charge is not None else None,
         }
 
         return output
