@@ -47,6 +47,7 @@ def valid_err_log(
     logger,
     log_errors,
     forces=False,
+    charges=True,
     epoch=None,
     valid_loader_name="Default",
 ):
@@ -58,17 +59,23 @@ def valid_err_log(
         inintial_phrase = "Initial"
     else:
         inintial_phrase = f"Epoch {epoch}"
+
     if log_errors == "PerAtomRMSE":
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        log_parts = [f"RMSE_E_per_atom={error_e:8.3f} meV"]
+
         if forces:
             error_f = eval_metrics["rmse_f"] * 1e3
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
-            )
-        else:
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV"
-            )
+            log_parts.append(f"RMSE_F={error_f:8.3f} meV / A")
+
+        if charges:
+            error_q = eval_metrics["rmse_charges_per_atom"]
+            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+
+        logging.info(
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
+        )
+
     elif (
         log_errors == "PerAtomRMSEstressvirials"
         and eval_metrics["rmse_stress"] is not None
@@ -76,9 +83,20 @@ def valid_err_log(
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
         error_f = eval_metrics["rmse_f"] * 1e3
         error_stress = eval_metrics["rmse_stress"] * 1e3
+        log_parts = [
+            f"RMSE_E_per_atom={error_e:8.3f} meV",
+            f"RMSE_F={error_f:8.3f} meV / A",
+            f"RMSE_stress={error_stress:8.3f} meV / A^3",
+        ]
+
+        if charges:
+            error_q = eval_metrics["rmse_charges_per_atom"]
+            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_stress={error_stress:8.3f} meV / A^3",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
+
     elif (
         log_errors == "PerAtomRMSEstressvirials"
         and eval_metrics["rmse_virials_per_atom"] is not None
@@ -86,9 +104,20 @@ def valid_err_log(
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
         error_f = eval_metrics["rmse_f"] * 1e3
         error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
+        log_parts = [
+            f"RMSE_E_per_atom={error_e:8.3f} meV",
+            f"RMSE_F={error_f:8.3f} meV / A",
+            f"RMSE_virials_per_atom={error_virials:8.3f} meV",
+        ]
+
+        if charges:
+            error_q = eval_metrics["rmse_charges_per_atom"]
+            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_virials_per_atom={error_virials:8.3f} meV",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
+
     elif (
         log_errors == "PerAtomMAEstressvirials"
         and eval_metrics["mae_stress_per_atom"] is not None
@@ -96,9 +125,20 @@ def valid_err_log(
         error_e = eval_metrics["mae_e_per_atom"] * 1e3
         error_f = eval_metrics["mae_f"] * 1e3
         error_stress = eval_metrics["mae_stress"] * 1e3
+        log_parts = [
+            f"MAE_E_per_atom={error_e:8.3f} meV",
+            f"MAE_F={error_f:8.3f} meV / A",
+            f"MAE_stress={error_stress:8.3f} meV / A^3",
+        ]
+
+        if charges:
+            error_q = eval_metrics["mae_charges_per_atom"]
+            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_stress={error_stress:8.3f} meV / A^3"
+            f"{inintial_phrase}: loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
+
     elif (
         log_errors == "PerAtomMAEstressvirials"
         and eval_metrics["mae_virials_per_atom"] is not None
@@ -106,53 +146,96 @@ def valid_err_log(
         error_e = eval_metrics["mae_e_per_atom"] * 1e3
         error_f = eval_metrics["mae_f"] * 1e3
         error_virials = eval_metrics["mae_virials"] * 1e3
+        log_parts = [
+            f"MAE_E_per_atom={error_e:8.3f} meV",
+            f"MAE_F={error_f:8.3f} meV / A",
+            f"MAE_virials={error_virials:8.3f} meV",
+        ]
+
+        if charges:
+            error_q = eval_metrics["mae_charges_per_atom"]
+            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A, MAE_virials={error_virials:8.3f} meV"
+            f"{inintial_phrase}: loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
+
     elif log_errors == "TotalRMSE":
         error_e = eval_metrics["rmse_e"] * 1e3
+        log_parts = [f"RMSE_E={error_e:8.3f} meV"]
+
         if forces:
             error_f = eval_metrics["rmse_f"] * 1e3
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A"
-            )
-        else:
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E={error_e:8.3f} meV"
-            )
+            log_parts.append(f"RMSE_F={error_f:8.3f} meV / A")
+
+        if charges:
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
+
+        logging.info(
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
+        )
+
     elif log_errors == "PerAtomMAE":
         error_e = eval_metrics["mae_e_per_atom"] * 1e3
+        log_parts = [f"MAE_E_per_atom={error_e:8.3f} meV"]
+
         if forces:
             error_f = eval_metrics["mae_f"] * 1e3
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
-            )
-        else:
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E_per_atom={error_e:8.3f} meV"
-            )
+            log_parts.append(f"MAE_F={error_f:8.3f} meV / A")
+
+        if charges:
+            error_q = eval_metrics["mae_charges_per_atom"]
+            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
+
+        logging.info(
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
+        )
+
     elif log_errors == "TotalMAE":
         error_e = eval_metrics["mae_e"] * 1e3
+        log_parts = [f"MAE_E={error_e:8.3f} meV"]
+
         if forces:
             error_f = eval_metrics["mae_f"] * 1e3
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E={error_e:8.3f} meV, MAE_F={error_f:8.3f} meV / A"
-            )
-        else:
-            logging.info(
-                f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, MAE_E={error_e:8.3f} meV"
-            )
+            log_parts.append(f"MAE_F={error_f:8.3f} meV / A")
+
+        if charges:
+            error_q = eval_metrics["mae_charges"]
+            log_parts.append(f"MAE_Q={error_q:8.3f} e")
+
+        logging.info(
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
+        )
+
     elif log_errors == "DipoleRMSE":
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        log_parts = [f"RMSE_MU_per_atom={error_mu:8.2f} mDebye"]
+
+        if charges:
+            error_q = eval_metrics["rmse_charges_per_atom"]
+            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
+
     elif log_errors == "EnergyDipoleRMSE":
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
         error_f = eval_metrics["rmse_f"] * 1e3
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        log_parts = [
+            f"RMSE_E_per_atom={error_e:8.3f} meV",
+            f"RMSE_F={error_f:8.3f} meV / A",
+            f"RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+        ]
+
+        if charges:
+            error_q = eval_metrics["rmse_charges_per_atom"]
+            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.3f} meV, RMSE_F={error_f:8.3f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
 
 
@@ -221,6 +304,7 @@ def train(
                     logger,
                     log_errors,
                     output_args["forces"],
+                    True,
                     None,
                     valid_loader_name,
                 )
@@ -232,6 +316,7 @@ def train(
                     logger,
                     log_errors,
                     output_args["forces"],
+                    True,
                     start_epoch,
                     valid_loader_name,
                 )
@@ -327,6 +412,7 @@ def train(
                             logger,
                             log_errors,
                             output_args["forces"],
+                            True,
                             epoch,
                             valid_loader_name,
                         )
@@ -555,6 +641,11 @@ class MACELoss(Metric):
         self.add_state("mus", default=[], dist_reduce_fx="cat")
         self.add_state("delta_mus", default=[], dist_reduce_fx="cat")
         self.add_state("delta_mus_per_atom", default=[], dist_reduce_fx="cat")
+        self.add_state(
+            "Charges_computed", default=torch.tensor(0.0), dist_reduce_fx="sum"
+        )
+        self.add_state("delta_charges", default=[], dist_reduce_fx="cat")
+        self.add_state("delta_charges_per_atom", default=[], dist_reduce_fx="cat")
 
     def update(self, batch, output):  # pylint: disable=arguments-differ
         loss = self.loss_fn(pred=output, ref=batch)
@@ -587,6 +678,13 @@ class MACELoss(Metric):
             self.delta_mus.append(batch.dipole - output["dipole"])
             self.delta_mus_per_atom.append(
                 (batch.dipole - output["dipole"])
+                / (batch.ptr[1:] - batch.ptr[:-1]).unsqueeze(-1)
+            )
+        if output.get("charges") is not None and batch.charges is not None:
+            self.Charges_computed += 1.0
+            self.delta_charges.append(batch.charges - output["charges"])
+            self.delta_charges_per_atom.append(
+                (batch.charges - output["charges"])
                 / (batch.ptr[1:] - batch.ptr[:-1]).unsqueeze(-1)
             )
 
@@ -637,5 +735,13 @@ class MACELoss(Metric):
             aux["rmse_mu_per_atom"] = compute_rmse(delta_mus_per_atom)
             aux["rel_rmse_mu"] = compute_rel_rmse(delta_mus, mus)
             aux["q95_mu"] = compute_q95(delta_mus)
+        if self.Charges_computed:
+            delta_charges = self.convert(self.delta_charges)
+            delta_charges_per_atom = self.convert(self.delta_charges_per_atom)
+            aux["mae_charges"] = compute_mae(delta_charges)
+            aux["mae_charges_per_atom"] = compute_mae(delta_charges_per_atom)
+            aux["rmse_charges"] = compute_rmse(delta_charges)
+            aux["rmse_charges_per_atom"] = compute_rmse(delta_charges_per_atom)
+            aux["q95_charges"] = compute_q95(delta_charges)
 
         return aux["loss"], aux

@@ -393,6 +393,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "dipole",
             "huber",
             "energy_forces_dipole",
+            "charges",
         ],
     )
     parser.add_argument(
@@ -445,6 +446,9 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="String of dictionary containing the weights for each config type",
         type=str,
         default='{"Default":1.0}',
+    )
+    parser.add_argument(
+        "--charges_weight", help="weight of charge loss", type=float, default=1.0
     )
     parser.add_argument(
         "--huber_delta",
@@ -617,6 +621,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "start_swa",
             "energy_weight",
             "forces_weight",
+            "charges_weight",
         ],
     )
     return parser
