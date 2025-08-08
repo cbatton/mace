@@ -415,6 +415,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default=1000.0,
     )
     parser.add_argument(
+        "--swa_charges_weight",
+        help="weight of charges loss after starting swa",
+        type=float,
+        default=1.0,
+    )
+    parser.add_argument(
         "--virials_weight", help="weight of virials loss", type=float, default=1.0
     )
     parser.add_argument(
