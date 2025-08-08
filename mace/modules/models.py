@@ -140,6 +140,21 @@ class MACE(torch.nn.Module):
             )
         )
 
+        self.charge_readouts = torch.nn.ModuleList()
+        if total_charge is not None:
+            self.register_buffer(
+                "total_charge",
+                torch.tensor(total_charge, dtype=torch.get_default_dtype()),
+            )
+            self.charge_readouts.append(
+                LinearReadoutBlock(
+                    hidden_irreps, o3.Irreps(f"{len(heads)}x0e"), cueq_config
+                )
+            )
+        else:
+            self.total_charge = None
+            self.charge_readouts.append(None)
+
         for i in range(num_interactions - 1):
             if i == num_interactions - 2:
                 hidden_irreps_out = str(
@@ -179,31 +194,33 @@ class MACE(torch.nn.Module):
                         cueq_config,
                     )
                 )
+                if self.total_charge is not None:
+                    self.charge_readouts.append(
+                        NonLinearReadoutBlock(
+                            hidden_irreps_out,
+                            (len(heads) * MLP_irreps).simplify(),
+                            gate,
+                            o3.Irreps(f"{len(heads)}x0e"),
+                            len(heads),
+                            cueq_config,
+                        )
+                    )
+                else:
+                    self.charge_readouts.append(None)
             else:
                 self.readouts.append(
                     LinearReadoutBlock(
                         hidden_irreps, o3.Irreps(f"{len(heads)}x0e"), cueq_config
                     )
                 )
-
-        self.charge_readouts = torch.nn.ModuleList()
-        if total_charge is not None:
-            print("Setting total charge to", total_charge)
-            self.register_buffer(
-                "total_charge", torch.tensor(total_charge, dtype=torch.float64)
-            )
-            self.charge_readouts.append(
-                NonLinearReadoutBlock(
-                    hidden_irreps_out,
-                    (len(heads) * MLP_irreps).simplify(),
-                    gate,
-                    o3.Irreps(f"{len(heads)}x0e"),
-                    len(heads),
-                    cueq_config,
-                )
-            )
-        else:
-            self.total_charge = None
+                if self.total_charge is not None:
+                    self.charge_readouts.append(
+                        LinearReadoutBlock(
+                            hidden_irreps, o3.Irreps(f"{len(heads)}x0e"), cueq_config
+                        )
+                    )
+                else:
+                    self.charge_readouts.append(None)
 
     def forward(
         self,
@@ -264,9 +281,10 @@ class MACE(torch.nn.Module):
         # Interactions
         energies = [e0]
         node_energies_list = [node_e0]
+        node_charges_list = []
         node_feats_list = []
-        for interaction, product, readout in zip(
-            self.interactions, self.products, self.readouts
+        for interaction, product, readout, charge_readout in zip(
+            self.interactions, self.products, self.readouts, self.charge_readouts
         ):
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
@@ -293,9 +311,25 @@ class MACE(torch.nn.Module):
             energies.append(energy)
             node_energies_list.append(node_energies)
 
+            if charge_readout is not None:
+                node_charges = charge_readout(node_feats, node_heads)[
+                    num_atoms_arange, node_heads
+                ]  # [n_nodes, len(heads)]
+                node_charges_list.append(node_charges)
+
+        # Concatenate node features
+        node_feats_out = torch.cat(node_feats_list, dim=-1)
+
+        # Sum over energy contributions
+        contributions = torch.stack(energies, dim=-1)
+        total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
+        node_energy_contributions = torch.stack(node_energies_list, dim=-1)
+        node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
+
         if self.total_charge is not None:
             # Compute the per atom charge
-            node_charges = self.charge_readouts[0](node_feats_list[-1], node_heads)
+            node_charges = torch.stack(node_charges_list, dim=-1)
+            node_charges = torch.sum(node_charges, dim=-1)
             total_charge = scatter_sum(
                 src=node_charges, index=data["batch"], dim=0, dim_size=num_graphs
             )
@@ -308,15 +342,6 @@ class MACE(torch.nn.Module):
             deviation = (total_charge - self.total_charge) / n_nodes
             node_deviation = deviation[data["batch"]]
             node_charges = node_charges - node_deviation
-
-        # Concatenate node features
-        node_feats_out = torch.cat(node_feats_list, dim=-1)
-
-        # Sum over energy contributions
-        contributions = torch.stack(energies, dim=-1)
-        total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
-        node_energy_contributions = torch.stack(node_energies_list, dim=-1)
-        node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
 
         # Outputs
         forces, virials, stress, hessian = get_outputs(
@@ -416,9 +441,10 @@ class ScaleShiftMACE(MACE):
         edge_feats = self.radial_embedding(lengths)
         # Interactions
         node_es_list = []
+        node_charges_list = []
         node_feats_list = []
-        for interaction, product, readout in zip(
-            self.interactions, self.products, self.readouts
+        for interaction, product, readout, charge_readout in zip(
+            self.interactions, self.products, self.readouts, self.charge_readouts
         ):
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
@@ -435,13 +461,16 @@ class ScaleShiftMACE(MACE):
                 readout(node_feats, node_heads)[num_atoms_arange, node_heads]
             )  # {[n_nodes, ], }
 
-        # Charge computation (replicated from MACE)
-        node_charges = None
+            if charge_readout is not None:
+                node_charges = charge_readout(node_feats, node_heads)[
+                    num_atoms_arange, node_heads
+                ]  # [n_nodes, len(heads)]
+                node_charges_list.append(node_charges)
+
         if self.total_charge is not None:
-            # Compute the per atom charge using the last node features
-            node_charges = self.charge_readouts[0](node_feats_list[-1], node_heads)[
-                num_atoms_arange, node_heads
-            ]
+            # Compute the per atom charge
+            node_charges = torch.stack(node_charges_list, dim=-1)
+            node_charges = torch.sum(node_charges, dim=-1)
             total_charge = scatter_sum(
                 src=node_charges, index=data["batch"], dim=0, dim_size=num_graphs
             )
