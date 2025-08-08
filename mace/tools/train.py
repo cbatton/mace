@@ -69,8 +69,8 @@ def valid_err_log(
             log_parts.append(f"RMSE_F={error_f:8.3f} meV / A")
 
         if charges:
-            error_q = eval_metrics["rmse_charges_per_atom"]
-            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -90,8 +90,8 @@ def valid_err_log(
         ]
 
         if charges:
-            error_q = eval_metrics["rmse_charges_per_atom"]
-            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -111,8 +111,8 @@ def valid_err_log(
         ]
 
         if charges:
-            error_q = eval_metrics["rmse_charges_per_atom"]
-            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -213,8 +213,8 @@ def valid_err_log(
         log_parts = [f"RMSE_MU_per_atom={error_mu:8.2f} mDebye"]
 
         if charges:
-            error_q = eval_metrics["rmse_charges_per_atom"]
-            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -231,8 +231,8 @@ def valid_err_log(
         ]
 
         if charges:
-            error_q = eval_metrics["rmse_charges_per_atom"]
-            log_parts.append(f"RMSE_Q_per_atom={error_q:8.3f} e")
+            error_q = eval_metrics["rmse_charges"]
+            log_parts.append(f"RMSE_Q={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"

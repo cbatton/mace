@@ -16,9 +16,11 @@ def get_transfer_keys() -> List[str]:
         "radial_embedding.bessel_fn.bessel_weights",
         "atomic_energies_fn.atomic_energies",
         "readouts.0.linear.weight",
+        "charge_readouts.0.linear.weight",
         "scale_shift.scale",
         "scale_shift.shift",
         *[f"readouts.1.linear_{i}.weight" for i in range(1, 3)],
+        *[f"charge_readouts.1.linear_{i}.weight" for i in range(1, 3)],
     ] + [
         s
         for j in range(2)

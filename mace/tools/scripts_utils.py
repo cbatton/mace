@@ -183,6 +183,7 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
         "atomic_inter_scale": scale.cpu().numpy(),
         "atomic_inter_shift": shift.cpu().numpy(),
         "heads": heads,
+        "total_charge": model.total_charge,
     }
     return config
 

@@ -74,13 +74,8 @@ def mean_squared_error_charges(ref: Batch, pred: TensorDict) -> torch.Tensor:
     configs_weight = torch.repeat_interleave(
         ref.weight, ref.ptr[1:] - ref.ptr[:-1]
     )  # [n_atoms]
-    configs_charges_weight = torch.repeat_interleave(
-        ref.charges_weight, ref.ptr[1:] - ref.ptr[:-1]
-    )  # [n_atoms]
     return torch.mean(
-        configs_weight
-        * configs_charges_weight
-        * torch.square(ref["charges"] - pred["charges"])
+        configs_weight * torch.square(ref["charges"] - pred["charges"])
     )  # []
 
 
