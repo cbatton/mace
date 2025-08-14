@@ -131,10 +131,6 @@ def valid_err_log(
             f"MAE_stress={error_stress:8.3f} meV / A^3",
         ]
 
-        if charges:
-            error_q = eval_metrics["mae_charges_per_atom"]
-            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
-
         logging.info(
             f"{inintial_phrase}: loss={valid_loss:8.8f}, {', '.join(log_parts)}"
         )
@@ -151,10 +147,6 @@ def valid_err_log(
             f"MAE_F={error_f:8.3f} meV / A",
             f"MAE_virials={error_virials:8.3f} meV",
         ]
-
-        if charges:
-            error_q = eval_metrics["mae_charges_per_atom"]
-            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -183,10 +175,6 @@ def valid_err_log(
         if forces:
             error_f = eval_metrics["mae_f"] * 1e3
             log_parts.append(f"MAE_F={error_f:8.3f} meV / A")
-
-        if charges:
-            error_q = eval_metrics["mae_charges_per_atom"]
-            log_parts.append(f"MAE_Q_per_atom={error_q:8.3f} e")
 
         logging.info(
             f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, {', '.join(log_parts)}"
@@ -645,7 +633,6 @@ class MACELoss(Metric):
             "Charges_computed", default=torch.tensor(0.0), dist_reduce_fx="sum"
         )
         self.add_state("delta_charges", default=[], dist_reduce_fx="cat")
-        self.add_state("delta_charges_per_atom", default=[], dist_reduce_fx="cat")
 
     def update(self, batch, output):  # pylint: disable=arguments-differ
         loss = self.loss_fn(pred=output, ref=batch)
@@ -683,10 +670,6 @@ class MACELoss(Metric):
         if output.get("charges") is not None and batch.charges is not None:
             self.Charges_computed += 1.0
             self.delta_charges.append(batch.charges - output["charges"])
-            self.delta_charges_per_atom.append(
-                (batch.charges - output["charges"])
-                / (batch.ptr[1:] - batch.ptr[:-1]).unsqueeze(-1)
-            )
 
     def convert(self, delta: Union[torch.Tensor, List[torch.Tensor]]) -> np.ndarray:
         if isinstance(delta, list):
@@ -737,11 +720,8 @@ class MACELoss(Metric):
             aux["q95_mu"] = compute_q95(delta_mus)
         if self.Charges_computed:
             delta_charges = self.convert(self.delta_charges)
-            delta_charges_per_atom = self.convert(self.delta_charges_per_atom)
             aux["mae_charges"] = compute_mae(delta_charges)
-            aux["mae_charges_per_atom"] = compute_mae(delta_charges_per_atom)
             aux["rmse_charges"] = compute_rmse(delta_charges)
-            aux["rmse_charges_per_atom"] = compute_rmse(delta_charges_per_atom)
             aux["q95_charges"] = compute_q95(delta_charges)
 
         return aux["loss"], aux
