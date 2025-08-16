@@ -68,6 +68,7 @@ class CommittorMACE(torch.nn.Module):
         radial_type: Optional[str] = "bessel",
         cueq_config: Optional[Dict[str, Any]] = None,
         p: float = 3.0,
+        c: float = 0.0,
         trainable_c: bool = False,
     ):
         super().__init__()
@@ -169,12 +170,17 @@ class CommittorMACE(torch.nn.Module):
             self.products.append(prod)
             if i == num_interactions - 2:
                 self.readouts.append(
-                    NonLinearReadoutBlock(hidden_irreps_out, MLP_irreps, gate, cueq_config=cueq_config)
+                    NonLinearReadoutBlock(
+                        hidden_irreps_out, MLP_irreps, gate, cueq_config=cueq_config
+                    )
                 )
             else:
-                self.readouts.append(LinearReadoutBlock(hidden_irreps), cueq_config=cueq_config)
+                self.readouts.append(
+                    LinearReadoutBlock(hidden_irreps, cueq_config=cueq_config)
+                )
         # pass through a modified sigmoid
-        self.psigmoid = ParametricSigmoid(p=p, trainable_c=trainable_c)
+        self.trainable_c = trainable_c
+        self.psigmoid = ParametricSigmoid(p=p, c=c, trainable_c=trainable_c)
 
     def read_MACE_model(
         self,
