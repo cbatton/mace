@@ -71,16 +71,31 @@ class CommittorTrainingLoss(torch.nn.Module):
 
 
 class CommittorValidationLoss(torch.nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, loss_type: str = "mse") -> None:
         super().__init__()
+        self.loss_type = loss_type
+
+        if loss_type == "mse":
+            self.loss_fn = committor_loss_valid
+        elif loss_type == "bce":
+            self.loss_fn = torch.nn.BCEWithLogitsLoss()
+        else:
+            raise ValueError(f"Unknown loss type {loss_type}. Choose 'mse' or 'bce'.")
 
     def forward(self, output: TensorDict, committor_ref: torch.Tensor) -> torch.Tensor:
-        # detach, take mean of committor_dt along non-batch dimensions
-        committor_pred = output["committor"]
-        return committor_loss_valid(committor_pred, committor_ref)
+        if self.loss_type == "mse":
+            committor_pred = output["committor"]
+        elif self.loss_type == "bce":
+            committor_pred = output["total_contributions"]
+        else:
+            raise ValueError(
+                f"Unknown loss type {self.loss_type}. Choose 'mse' or 'bce'."
+            )
+
+        return self.loss_fn(committor_pred, committor_ref)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}()"
+        return f"{self.__class__.__name__}(loss_type='{self.loss_type}')"
 
 
 def apply_conditional_thresholds(

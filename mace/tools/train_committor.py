@@ -86,6 +86,7 @@ def train_committor(
     rank: Optional[int] = None,
     world_size: Optional[int] = None,
     readouts_only: bool = False,
+    adjust_shift: bool = False,
 ):
     # Start timers if wanted
     if wall_clock_time != 0:
@@ -105,7 +106,7 @@ def train_committor(
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
     logging.info("Started training")
     # See if constant shift in model's sigmoid needs to be adjusted
-    if model.psigmoid.c == 0.0:
+    if model.psigmoid.c == 0.0 and adjust_shift:
         logging.info("Adjusting constant shift in model's sigmoid")
         new_shift = adjust_sigmoid_shift(
             model=model,
